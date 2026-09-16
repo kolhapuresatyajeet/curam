@@ -1,0 +1,197 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover-border: hsl(var(--popover-border));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --font-sans: var(--app-font-sans);
+  --font-mono: var(--app-font-mono);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --background: 42 32% 96%;
+  --foreground: 213 34% 18%;
+  --border: 210 23% 87%;
+  --input: 210 23% 82%;
+  --ring: 169 71% 34%;
+  --card: 42 38% 99%;
+  --card-foreground: 213 34% 18%;
+  --card-border: 210 23% 87%;
+  --popover: 42 38% 99%;
+  --popover-foreground: 213 34% 18%;
+  --popover-border: 210 23% 87%;
+  --primary: 169 71% 34%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 189 42% 92%;
+  --secondary-foreground: 190 49% 24%;
+  --muted: 210 27% 92%;
+  --muted-foreground: 213 16% 47%;
+  --accent: 36 82% 56%;
+  --accent-foreground: 26 39% 18%;
+  --destructive: 3 62% 47%;
+  --destructive-foreground: 0 0% 100%;
+  --chart-1: 169 71% 34%;
+  --chart-2: 36 82% 56%;
+  --chart-3: 206 61% 47%;
+  --chart-4: 278 43% 52%;
+  --chart-5: 3 62% 47%;
+  --sidebar: 213 41% 17%;
+  --sidebar-foreground: 212 29% 87%;
+  --sidebar-border: 213 30% 27%;
+  --sidebar-primary: 169 64% 51%;
+  --sidebar-primary-foreground: 213 41% 13%;
+  --sidebar-accent: 213 33% 23%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-ring: 169 64% 51%;
+  --app-font-sans: 'DM Sans', sans-serif;
+  --app-font-mono: 'Space Mono', monospace;
+  --radius: 0.65rem;
+  --elevate-1: rgba(16, 42, 58, .04);
+  --elevate-2: rgba(16, 42, 58, .08);
+}
+
+.dark {
+  --background: 213 41% 10%;
+  --foreground: 42 28% 94%;
+  --border: 213 24% 26%;
+  --input: 213 24% 30%;
+  --ring: 169 64% 51%;
+  --card: 213 36% 14%;
+  --card-foreground: 42 28% 94%;
+  --card-border: 213 24% 26%;
+  --popover: 213 36% 14%;
+  --popover-foreground: 42 28% 94%;
+  --popover-border: 213 24% 26%;
+  --primary: 169 64% 51%;
+  --primary-foreground: 213 41% 13%;
+  --secondary: 190 30% 22%;
+  --secondary-foreground: 190 46% 83%;
+  --muted: 213 27% 22%;
+  --muted-foreground: 213 16% 67%;
+  --accent: 36 82% 56%;
+  --accent-foreground: 26 39% 18%;
+  --destructive: 3 62% 57%;
+  --destructive-foreground: 0 0% 100%;
+  --sidebar: 213 43% 9%;
+  --sidebar-foreground: 212 29% 87%;
+  --sidebar-border: 213 29% 21%;
+  --sidebar-primary: 169 64% 51%;
+  --sidebar-primary-foreground: 213 41% 13%;
+  --sidebar-accent: 213 33% 17%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-ring: 169 64% 51%;
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { background: hsl(var(--background)); }
+  body { @apply font-sans antialiased bg-background text-foreground; margin: 0; }
+  button, input, select { font: inherit; }
+}
+
+@layer utilities {
+  .font-mono { font-family: var(--app-font-mono); }
+  .text-balance { text-wrap: balance; }
+}
+
+.app-shell { min-height: 100dvh; background: hsl(var(--background)); }
+.sidebar { background: hsl(var(--sidebar)); color: hsl(var(--sidebar-foreground)); }
+.sidebar-scroll { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.14) transparent; }
+.sidebar-scroll::-webkit-scrollbar { width: 5px; }
+.sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 10px; }
+.main-grid { background-image: linear-gradient(rgba(27, 65, 74, .025) 1px, transparent 1px), linear-gradient(90deg, rgba(27, 65, 74, .025) 1px, transparent 1px); background-size: 24px 24px; }
+.surface { background: hsl(var(--card)); border: 1px solid hsl(var(--card-border)); box-shadow: 0 1px 2px rgba(29, 52, 65, .03); }
+.surface-lift { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.surface-lift:hover { transform: translateY(-2px); border-color: hsl(var(--primary) / .35); box-shadow: 0 8px 24px rgba(24, 65, 71, .09); }
+.nav-item { color: hsl(var(--sidebar-foreground) / .67); transition: background-color .16s ease, color .16s ease, transform .16s ease; }
+.nav-item:hover { color: hsl(var(--sidebar-foreground)); background: hsl(var(--sidebar-accent)); transform: translateX(2px); }
+.nav-item.active { color: hsl(var(--sidebar-accent-foreground)); background: hsl(var(--sidebar-primary) / .16); box-shadow: inset 3px 0 hsl(var(--sidebar-primary)); }
+.fade-in { animation: fadeIn .35s ease both; }
+.stagger-1 { animation-delay: .05s; } .stagger-2 { animation-delay: .1s; } .stagger-3 { animation-delay: .15s; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+.toast-enter { animation: toastIn .25s ease both; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.pulse-dot { animation: pulseDot 2.2s ease-in-out infinite; }
+@keyframes pulseDot { 0%, 100% { box-shadow: 0 0 0 0 hsl(var(--primary) / .25); } 50% { box-shadow: 0 0 0 5px hsl(var(--primary) / 0); } }
+@media (max-width: 767px) {
+  .mobile-drawer { position: fixed; inset: 0 auto 0 0; width: min(300px, 86vw); z-index: 40; box-shadow: 18px 0 40px rgba(12, 31, 43, .2); }
+  .mobile-scrim { position: fixed; inset: 0; z-index: 35; background: rgba(14, 28, 38, .42); }
+}
+
+.brand-mark { display: grid; height: 34px; width: 34px; place-items: center; border-radius: 10px; background: hsl(var(--sidebar-primary)); color: hsl(var(--sidebar-primary-foreground)); box-shadow: 0 5px 14px rgba(37, 187, 156, .16); }
+.avatar { display: inline-grid; flex-shrink: 0; place-items: center; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: -.02em; }
+.avatar-sm { height: 27px; width: 27px; font-size: 9px; }
+.avatar-md { height: 33px; width: 33px; }
+.avatar-lg { height: 48px; width: 48px; font-size: 13px; }
+.avatar-teal { background: #d9f1e9; color: #0b7963; }
+.avatar-blue { background: #e0ecf8; color: #23639b; }
+.avatar-amber { background: #f9edcf; color: #9a6705; }
+.avatar-purple { background: #e9e0f3; color: #6e4a98; }
+.avatar-coral { background: #fae2df; color: #b5443b; }
+.avatar-slate { background: #e7ebef; color: #5f6e7e; }
+.icon-box { display: inline-grid; height: 31px; width: 31px; flex-shrink: 0; place-items: center; border-radius: 9px; }
+.icon-teal { background: #ddf2eb; color: #0a8066; }
+.icon-blue { background: #e2eef9; color: #2b6da5; }
+.icon-amber { background: #fbefcf; color: #9b6908; }
+.icon-purple { background: #ece4f4; color: #71529b; }
+.icon-coral { background: #fae5e2; color: #bd4e45; }
+.icon-slate { background: #e9edf0; color: #697886; }
+.badge { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; border-radius: 5px; padding: 3px 7px; font-size: 10px; font-weight: 600; line-height: 1.1; }
+.tone-teal { background: #e1f3ed; color: #08765e; }
+.tone-blue { background: #e5eff9; color: #27659a; }
+.tone-amber { background: #fdf0d2; color: #986506; }
+.tone-purple { background: #ece4f4; color: #704b96; }
+.tone-coral { background: #fae3e0; color: #b5433b; }
+.tone-slate { background: #edf0f2; color: #687886; }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 7px; border: 1px solid transparent; font-size: 11px; font-weight: 600; transition: transform .15s ease, background-color .15s ease, border-color .15s ease, color .15s ease; }
+.button:active { transform: translateY(1px); }
+.button:disabled { cursor: not-allowed; opacity: .5; }
+.button-md { min-height: 36px; padding: 0 13px; }
+.button-sm { min-height: 30px; padding: 0 10px; }
+.button-primary { background: #0d7c5f; color: white; box-shadow: 0 2px 5px rgba(13, 124, 95, .17); }
+.button-primary:hover { background: #0a6b52; }
+.button-secondary { border-color: #d9e1e5; background: rgba(255,255,255,.78); color: #506273; }
+.button-secondary:hover { border-color: #9ccabc; background: #f4faf7; color: #206c5b; }
+.button-ghost { color: #527f77; }
+.button-ghost:hover { background: #eaf5f1; }
+.button-danger { background: #b5433b; color: #fff; }
+.data-table { border-collapse: collapse; font-size: 11px; }
+.data-table th { background: #f8faf9; padding: 10px 13px; text-align: left; font-size: 10px; font-weight: 600; color: #82909a; white-space: nowrap; }
+.data-table td { border-top: 1px solid #edf0f1; padding: 11px 13px; color: #6a7882; vertical-align: middle; }
+.data-table tbody tr { transition: background-color .15s ease; }
+.data-table tbody tr:hover { background: #fbfdfc; }
+.calendar-event { position: absolute; left: 8px; right: 8px; min-height: 64px; overflow: hidden; border-left: 3px solid; border-radius: 6px; padding: 7px 8px; text-align: left; transition: transform .15s ease, box-shadow .15s ease; }
+.calendar-event:hover { z-index: 2; transform: translateX(2px); box-shadow: 0 5px 12px rgba(29, 52, 65, .1); }
+.calendar-teal { border-color: #0d8c6c; background: #e2f4ee; color: #176955; }
+.calendar-blue { border-color: #397db5; background: #e4eff9; color: #2a5f8c; }
+.calendar-amber { border-color: #ca8d15; background: #fdf1d3; color: #895e0b; }
+.calendar-purple { border-color: #8463a9; background: #eee6f5; color: #684b89; }
+.calendar-coral { border-color: #c45148; background: #fae5e2; color: #a3433c; }
+.bg-coral-500 { background-color: #c45148; }
