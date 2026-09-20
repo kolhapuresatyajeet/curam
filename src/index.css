@@ -187,7 +187,24 @@
 .data-table td { border-top: 1px solid #edf0f1; padding: 11px 13px; color: #6a7882; vertical-align: middle; }
 .data-table tbody tr { transition: background-color .15s ease; }
 .data-table tbody tr:hover { background: #fbfdfc; }
-.calendar-event { position: absolute; left: 8px; right: 8px; min-height: 64px; overflow: hidden; border-left: 3px solid; border-radius: 6px; padding: 7px 8px; text-align: left; transition: transform .15s ease, box-shadow .15s ease; }
+.calendar-event {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  box-sizing: border-box;
+  display: block;
+  margin: 0;
+  border: 0;
+  border-left: 3px solid;
+  border-radius: 4px;
+  padding: 2px 6px;
+  overflow: hidden;
+  appearance: none;
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.15;
+  min-height: 0;
+}
 .calendar-event:hover { z-index: 2; transform: translateX(2px); box-shadow: 0 5px 12px rgba(29, 52, 65, .1); }
 .calendar-teal { border-color: #0d8c6c; background: #e2f4ee; color: #176955; }
 .calendar-blue { border-color: #397db5; background: #e4eff9; color: #2a5f8c; }
