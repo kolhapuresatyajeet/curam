@@ -59,6 +59,14 @@ async function hydrate(userId: string | null, email: string | null, fullName: st
   emit();
 }
 
+/** Re-fetch the staff row for the current user. Call after bootstrap_practice so the snapshot reflects the new practice. */
+export async function refreshAuthSession() {
+  if (!supabase) return;
+  const { data } = await supabase.auth.getSession();
+  const user = data.session?.user;
+  await hydrate(user?.id ?? null, user?.email ?? null, displayName(user));
+}
+
 let started = false;
 
 function displayName(user?: { user_metadata?: Record<string, unknown>; email?: string } | null) {
