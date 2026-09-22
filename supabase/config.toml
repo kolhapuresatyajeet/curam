@@ -1,0 +1,22 @@
+project_id = "duphvinfwkskjkfqaetr"
+
+[api]
+enabled = true
+
+[db]
+major_version = 17
+
+[functions.book-appointment]
+verify_jwt = false
+
+[functions.appointment-availability]
+verify_jwt = false
+
+[functions.sile-webhook]
+verify_jwt = false
+
+[functions.voice-appointments]
+verify_jwt = false
+
+[functions.google-calendar-oauth-callback]
+verify_jwt = false

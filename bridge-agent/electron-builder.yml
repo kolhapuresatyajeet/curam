@@ -1,0 +1,6 @@
+appId: ie.curam.healthlink-bridge
+productName: Cúram HealthLink Bridge
+win:
+  target: nsis
+nsis:
+  oneClick: true

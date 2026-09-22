@@ -1,0 +1,9 @@
+{
+  "name": "my-curam",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo/AppEntry.js",
+  "scripts": {
+    "start": "echo \"Install Expo in this folder to run the patient app\""
+  }
+}

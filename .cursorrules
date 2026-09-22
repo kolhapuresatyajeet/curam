@@ -1,0 +1,51 @@
+# Cúram — Irish GP Practice Management Platform
+
+## Project context
+You are building Cúram, an AI-first GP practice management platform for Irish general practice. The product serves GPs, practice nurses, receptionists, and practice managers in Ireland. It integrates with Irish healthcare systems (HealthLink, Healthmail, PCRS) and Irish health insurers (VHI, Laya, Irish Life, Aviva).
+
+## Tech stack
+- Frontend: React 18, TypeScript, Tailwind CSS, shadcn/ui components
+- Backend: Supabase (PostgreSQL, Edge Functions, Auth, Storage, Realtime)
+- Integrations: Stripe (payments), Nodemailer (Healthmail SMTP), Vapi.ai (voice AI)
+- AI: Whisper (transcription), Claude API (note structuring)
+- Deployment: Vercel (frontend), Supabase Cloud EU (backend)
+- Mobile: React Native / Expo (patient app — MyCúram)
+
+## Architecture principles
+- All patient data must stay in EU (Supabase Frankfurt region)
+- Every database mutation must write to audit_log (HIQA compliance)
+- Row-Level Security (RLS) on all tables — staff only see their practice's data
+- Role-based access: gp, nurse, pm, receptionist, hca, locum
+- All AI-generated content (notes, letters, referrals) requires human approval before saving
+- Offline-first for consultation workflow (service worker + IndexedDB)
+
+## Irish healthcare specifics
+- GMS = General Medical Services (public/medical card patients)
+- PCRS = Primary Care Reimbursement Service (processes GMS claims)
+- HealthLink = national clinical messaging (HL7 v2.4 XML messages)
+- Healthmail = secure email (@healthmail.ie) for prescriptions and clinical comms
+- CDM = Chronic Disease Management programme (diabetes, COPD, asthma, CVD)
+- IHI = Individual Health Identifier (18-digit number)
+- STC = Special Type Consultation (PCRS claim codes)
+- ICPC-2 = clinical coding system used in Irish general practice
+- GPIT = GP IT accreditation body (under ICGP)
+
+## Coding standards
+- Use TypeScript strict mode
+- Components in /src/components/{feature}/
+- Pages in /src/pages/
+- Supabase functions in /supabase/functions/
+- API types generated from Supabase schema
+- Use React Query (TanStack Query) for data fetching
+- Use Zustand-style stores for client state
+- All dates in ISO 8601, display in dd/MM/yyyy (Irish format)
+- Currency always EUR, format: €X,XXX.XX
+- Phone numbers in Irish format: 08X XXX XXXX
+
+## Key domain rules
+- Lab results marked "abnormal" can NEVER be delivered by AI — only GP callback
+- Prescriptions require GP approval (never auto-approved)
+- CDM reviews require both nurse review AND GP review
+- GDPR: patient records retained 8 years (adults), until age 25 (children)
+- All Síle AI voice calls must be logged with recording and transcript
+- Emergency detection: if patient mentions chest pain, breathing difficulty → instruct to call 999/112
