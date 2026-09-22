@@ -5,7 +5,11 @@ import { bootstrapPractice } from '@/lib/db';
 import { signInWithGoogle } from '@/lib/google-auth';
 import { supabaseConfigured } from '@/lib/supabase';
 import { appStore } from '@/stores/appStore';
+<<<<<<< HEAD
 import { refreshAuthSession, useSupabaseAuth } from '@/stores/authSession';
+=======
+import { useSupabaseAuth } from '@/stores/authSession';
+>>>>>>> refs/remotes/origin/main
 
 export default function SetupPage() {
   const [, setLocation] = useLocation();
@@ -96,7 +100,10 @@ export default function SetupPage() {
             }
             appStore.upsertStaff(result.staff);
             appStore.login(result.staff.id);
+<<<<<<< HEAD
             await refreshAuthSession();
+=======
+>>>>>>> refs/remotes/origin/main
             setLocation('/');
           })();
         }}

@@ -1,8 +1,8 @@
-import { useEffect, useSyncExternalStore } from 'react';
-import { fetchPractice, fetchStaffForUser } from '@/lib/db';
-import { supabase, supabaseConfigured } from '@/lib/supabase';
-import { appStore } from '@/stores/appStore';
-import type { Staff } from '@/types/domain';
+import { useEffect, useSyncExternalStore } from "react";
+import { fetchPractice, fetchStaffForUser } from "@/lib/db";
+import { supabase, supabaseConfigured } from "@/lib/supabase";
+import { appStore } from "@/stores/appStore";
+import type { Staff } from "@/types/domain";
 
 interface AuthSnapshot {
   ready: boolean;
@@ -28,9 +28,20 @@ function emit() {
   listeners.forEach((fn) => fn());
 }
 
-async function hydrate(userId: string | null, email: string | null, fullName: string | null) {
+async function hydrate(
+  userId: string | null,
+  email: string | null,
+  fullName: string | null,
+) {
   if (!userId) {
-    snapshot = { ready: true, userId: null, email: null, fullName: null, staff: null, needsSetup: false };
+    snapshot = {
+      ready: true,
+      userId: null,
+      email: null,
+      fullName: null,
+      staff: null,
+      needsSetup: false,
+    };
     emit();
     return;
   }
@@ -42,19 +53,33 @@ async function hydrate(userId: string | null, email: string | null, fullName: st
       appStore.updatePractice({
         id: practice.id,
         name: practice.name,
-        address: practice.address ?? '',
-        eircode: practice.eircode ?? '',
-        phone: practice.phone ?? '',
-        healthlinkId: practice.healthlink_id ?? '',
-        healthmail: practice.healthmail ?? '',
-        pcrsReg: practice.pcrs_reg ?? '',
-        stripeAccountId: practice.stripe_account_id ?? '',
+        address: practice.address ?? "",
+        eircode: practice.eircode ?? "",
+        phone: practice.phone ?? "",
+        healthlinkId: practice.healthlink_id ?? "",
+        healthmail: practice.healthmail ?? "",
+        pcrsReg: practice.pcrs_reg ?? "",
+        stripeAccountId: practice.stripe_account_id ?? "",
       });
     }
     appStore.login(staff.id);
-    snapshot = { ready: true, userId, email, fullName, staff, needsSetup: false };
+    snapshot = {
+      ready: true,
+      userId,
+      email,
+      fullName,
+      staff,
+      needsSetup: false,
+    };
   } else {
-    snapshot = { ready: true, userId, email, fullName, staff: null, needsSetup: true };
+    snapshot = {
+      ready: true,
+      userId,
+      email,
+      fullName,
+      staff: null,
+      needsSetup: true,
+    };
   }
   emit();
 }
@@ -69,11 +94,13 @@ export async function refreshAuthSession() {
 
 let started = false;
 
-function displayName(user?: { user_metadata?: Record<string, unknown>; email?: string } | null) {
+function displayName(
+  user?: { user_metadata?: Record<string, unknown>; email?: string } | null,
+) {
   if (!user) return null;
   const meta = user.user_metadata ?? {};
   const name = meta.full_name ?? meta.name ?? meta.given_name;
-  return typeof name === 'string' ? name : user.email ?? null;
+  return typeof name === "string" ? name : (user.email ?? null);
 }
 
 export async function startAuthListener() {
