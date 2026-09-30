@@ -275,6 +275,7 @@ export interface Invoice {
   insurerClaimRef?: string;
   stripePaymentId?: string;
   paymentLinkUrl?: string;
+  paymentMethod?: 'cash' | 'card' | 'stripe';
   description?: string;
   issuedAt: string;
 }

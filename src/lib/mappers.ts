@@ -226,6 +226,7 @@ export interface InvoiceRow {
   insurer_claim_ref: string | null;
   stripe_payment_id: string | null;
   payment_link_url: string | null;
+  payment_method: string | null;
   description: string | null;
   issued_at: string | null;
 }
@@ -245,6 +246,7 @@ export function invoiceFromRow(row: InvoiceRow): Invoice {
     insurerClaimRef: row.insurer_claim_ref ?? undefined,
     stripePaymentId: row.stripe_payment_id ?? undefined,
     paymentLinkUrl: row.payment_link_url ?? undefined,
+    paymentMethod: (row.payment_method ?? undefined) as Invoice['paymentMethod'],
     description: row.description ?? undefined,
     issuedAt: row.issued_at ?? new Date().toISOString(),
   };

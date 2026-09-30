@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AppButton, Badge, SectionTitle, TableShell, Tabs } from '@/components/shared/ui';
-import { fetchInvoices, updateInvoicePayment } from '@/lib/db';
+import { fetchInvoices, fetchStripeConnected, updateInvoicePayment } from '@/lib/db';
 import { createPaymentLinkRemote } from '@/lib/stripe';
 import { supabaseConfigured } from '@/lib/supabase';
 import { formatEur, formatIrishDate } from '@/lib/utils';
@@ -11,10 +11,12 @@ function agingDays(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
 }
 
-function LinkCell({ invoice }: { invoice: Invoice }) {
+function LinkCell({ invoice, stripeConnected }: { invoice: Invoice; stripeConnected: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+
+  if (!stripeConnected || invoice.billingSource === 'gms' || invoice.amount - invoice.paidAmount <= 0) return null;
 
   if (invoice.paymentLinkUrl) {
     return (
@@ -31,7 +33,6 @@ function LinkCell({ invoice }: { invoice: Invoice }) {
       </button>
     );
   }
-  if (invoice.billingSource === 'gms' || invoice.amount - invoice.paidAmount <= 0) return null;
 
   return (
     <span className="flex flex-col items-start gap-1">
@@ -62,6 +63,7 @@ export default function BillingPage() {
   const [tab, setTab] = useState('Overview');
   const [status, setStatus] = useState<InvoiceStatus | 'all'>('all');
   const [loaded, setLoaded] = useState(false);
+  const [stripeConnected, setStripeConnected] = useState(false);
 
   // Pull real invoices from Supabase (including auto-invoices created by the DB trigger).
   useEffect(() => {
@@ -70,6 +72,7 @@ export default function BillingPage() {
     void fetchInvoices().then((invoices) => {
       if (invoices.length) appStore.upsertInvoices(invoices);
     });
+    void fetchStripeConnected().then(setStripeConnected);
   }, [loaded]);
 
   const invoices = useMemo(
@@ -124,7 +127,7 @@ export default function BillingPage() {
                       <Badge tone={inv.status === 'paid' ? 'teal' : inv.status === 'rejected' ? 'coral' : 'amber'}>{inv.status}</Badge>
                     </td>
                     <td>
-                      <LinkCell invoice={inv} />
+                      <LinkCell invoice={inv} stripeConnected={stripeConnected} />
                     </td>
                     <td>
                       {unpaid > 0 && (
@@ -133,13 +136,14 @@ export default function BillingPage() {
                           onClick={() => {
                             const newPaid = Math.min(inv.paidAmount + unpaid, inv.amount);
                             const newStatus = newPaid >= inv.amount ? 'paid' : 'partial';
+                            const method = stripeConnected ? 'card' : 'cash';
                             appStore.payInvoice(inv.id, unpaid);
                             if (supabaseConfigured) {
-                              void updateInvoicePayment(inv.id, newPaid, newStatus);
+                              void updateInvoicePayment(inv.id, newPaid, newStatus, method);
                             }
                           }}
                         >
-                          Record payment
+                          {stripeConnected ? 'Record payment' : 'Cash / in-room'}
                         </AppButton>
                       )}
                     </td>

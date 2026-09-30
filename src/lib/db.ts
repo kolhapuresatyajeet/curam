@@ -89,13 +89,25 @@ export async function fetchInvoices(): Promise<Invoice[]> {
   return (data as InvoiceRow[]).map(invoiceFromRow);
 }
 
-export async function updateInvoicePayment(invoiceId: string, paidAmount: number, status: Invoice['status']) {
+export async function updateInvoicePayment(
+  invoiceId: string,
+  paidAmount: number,
+  status: Invoice['status'],
+  method: 'cash' | 'card' | 'stripe' = 'card',
+) {
   if (!supabase) return { error: new Error('Supabase is not configured') };
   const { error } = await supabase
     .from('invoices')
-    .update({ paid_amount: paidAmount, status })
+    .update({ paid_amount: paidAmount, status, payment_method: method })
     .eq('id', invoiceId);
   return { error };
+}
+
+/** True when the practice has connected its own Stripe key (optional feature). */
+export async function fetchStripeConnected(): Promise<boolean> {
+  if (!supabase) return false;
+  const { data } = await supabase.from('practice_vault_refs').select('stripe_secret_id').maybeSingle();
+  return Boolean(data?.stripe_secret_id);
 }
 
 export async function fetchAppointments(): Promise<Appointment[]> {

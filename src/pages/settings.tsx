@@ -44,10 +44,11 @@ export default function SettingsPage() {
       {tab === 'Integrations' && (
         <div className="space-y-4">
           <div className="surface max-w-lg space-y-3 rounded-xl p-4">
-            <div className="text-sm font-semibold">Stripe — online payments</div>
+            <div className="text-sm font-semibold">Stripe — online payments (optional)</div>
             <p className="text-[12px] text-slate-600">
-              Paste the practice's own Stripe secret key (Developers → API keys). It is stored encrypted in the Supabase Vault and
-              never leaves the server. Patients pay invoices through secure Stripe-hosted payment pages.
+              Optional — skip this if the practice takes cash or card payments in-room only; those are recorded directly in Billing.
+              To take payments online, paste the practice's own Stripe secret key (Developers → API keys). It is stored encrypted in
+              the Supabase Vault and never leaves the server.
             </p>
             <StripeKeyForm />
           </div>
