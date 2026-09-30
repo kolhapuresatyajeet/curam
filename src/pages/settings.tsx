@@ -8,6 +8,7 @@ import { useSupabaseAuth } from '@/stores/authSession';
 import { formatIrishDateTime } from '@/lib/utils';
 import { ageFromDob } from '@/lib/utils';
 import { appStore, useAppState } from '@/stores/appStore';
+import { supabase, supabaseConfigured } from '@/lib/supabase';
 import { patientName } from '@/types/domain';
 
 export default function SettingsPage() {
@@ -16,6 +17,9 @@ export default function SettingsPage() {
   const [tab, setTab] = useState(() => (new URLSearchParams(window.location.search).get('google') ? 'Integrations' : 'Practice'));
   const [name, setName] = useState(state.practice.name);
   const [eraseError, setEraseError] = useState('');
+  const [erasePatientId, setErasePatientId] = useState('');
+  const [eraseStatus, setEraseStatus] = useState<{ canErase: boolean; reason: string } | null>(null);
+  const [eraseChecking, setEraseChecking] = useState(false);
   const [googleError, setGoogleError] = useState('');
   const me = state.staff.find((member) => member.id === auth.staff?.id) ?? auth.staff ?? state.staff.find((member) => member.id === state.session?.staffId);
   const googleFlag = new URLSearchParams(window.location.search).get('google');
@@ -131,41 +135,114 @@ export default function SettingsPage() {
       {tab === 'Security & GDPR' && (
         <div className="space-y-4">
           <div className="surface rounded-xl p-4 text-xs text-slate-600">
-            <p>2FA (TOTP) will be enforced via Supabase Auth. Session timeout is 30 minutes. Password policy: 12+ characters with mixed case and a digit.</p>
-            <p className="mt-2">Retention: 8 years for adults, until age 25 for children. Erasure is blocked inside the retention window.</p>
+            <p className="font-semibold text-slate-800">Account security</p>
+            <p className="mt-2">
+              2FA (TOTP) is enforced through Supabase Auth — staff are prompted to enrol a device
+              at next sign-in. Session timeout is 30 minutes. Password policy: 12+ characters with
+              mixed case and a digit (set in the Supabase Auth policy).
+            </p>
           </div>
-          <AppButton
-            size="sm"
-            onClick={() => {
-              const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = 'curam-gdpr-export.json';
-              a.click();
-            }}
-          >
-            Export workspace (JSON)
-          </AppButton>
+
+          <div className="surface rounded-xl p-4 text-xs text-slate-600">
+            <p className="font-semibold text-slate-800">Retention &amp; right to erasure</p>
+            <p className="mt-2">
+              Adults: 8 years after last recorded activity. Children: until age 25. The check below
+              uses the live retention RPC — erasure is blocked while retention applies.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <select
+                className="rounded-md border border-slate-200 px-2 py-1.5 text-xs"
+                value={erasePatientId}
+                onChange={(e) => {
+                  setErasePatientId(e.target.value);
+                  setEraseStatus(null);
+                }}
+              >
+                <option value="">Select a patient…</option>
+                {state.patients.map((patient) => (
+                  <option key={patient.id} value={patient.id}>{patientName(patient)}</option>
+                ))}
+              </select>
+              <AppButton
+                size="sm"
+                variant="danger"
+                disabled={!erasePatientId || eraseChecking}
+                onClick={() => {
+                  if (!supabaseConfigured || !erasePatientId) return;
+                  setEraseChecking(true);
+                  setEraseStatus(null);
+                  void supabase!
+                    .rpc('patient_retention_status', { p_patient_id: erasePatientId })
+                    .then(({ data, error }) => {
+                      setEraseChecking(false);
+                      if (error) setEraseStatus({ canErase: false, reason: error.message });
+                      else if (data) {
+                        const payload = data as { can_erase: boolean; reason: string };
+                        setEraseStatus({ canErase: payload.can_erase, reason: payload.reason });
+                      }
+                    });
+                }}
+              >
+                {eraseChecking ? 'Checking…' : 'Check erasure eligibility'}
+              </AppButton>
+            </div>
+            {eraseStatus && (
+              <p className={`mt-2 font-medium ${eraseStatus.canErase ? 'text-teal-700' : 'text-amber-700'}`}>
+                {eraseStatus.canErase
+                  ? `Erasure permitted: ${eraseStatus.reason} Contact the DPO to action final deletion (audited).`
+                  : `Erasure blocked: ${eraseStatus.reason}`}
+              </p>
+            )}
+          </div>
+
+          <div className="surface rounded-xl p-4 text-xs text-slate-600">
+            <p className="font-semibold text-slate-800">Data processing register</p>
+            <ul className="mt-2 list-disc space-y-1 pl-4">
+              <li><strong>Supabase (EU — Frankfurt)</strong> — hosting, database, auth, storage. All patient data at rest in the EU.</li>
+              <li><strong>Vercel (EU)</strong> — frontend hosting for the staff web app.</li>
+              <li><strong>Twilio</strong> — SMS appointment reminders (phone number only).</li>
+              <li><strong>Stripe</strong> — payment links and card payments (billing contact details).</li>
+              <li><strong>OpenAI / Anthropic</strong> — AI scribe transcription and note structuring. Audio and transcripts are processed for this purpose only and are never used for model training.</li>
+              <li><strong>Google</strong> — optional clinician calendar sync (appointment times, no clinical data).</li>
+              <li><strong>Healthlink / Healthmail (HSE)</strong> — clinical message transport under HSE governance.</li>
+            </ul>
+          </div>
+
+          <div className="surface rounded-xl p-4 text-xs text-slate-600">
+            <p className="font-semibold text-slate-800">Personal data breach procedure</p>
+            <ol className="mt-2 list-decimal space-y-1 pl-4">
+              <li>Contain — identify affected system(s) and stop further exposure.</li>
+              <li>Assess — establish scope: patients affected, data categories, risk to rights.</li>
+              <li>Notify the DPC <strong>within 72 hours</strong> via breach.dpb@dataprotection.ie (unless unlikely to result in a risk).</li>
+              <li>Notify affected patients without undue delay where there is high risk.</li>
+              <li>Document every breach (even non-notifiable) in the practice breach log.</li>
+            </ol>
+            <p className="mt-2 border-l-2 border-slate-300 pl-3 italic">
+              Template: “We are writing to inform you of a data incident that may have affected
+              your personal information. On [date], [description]. The data involved: [categories].
+              We have taken the following steps: [actions]. Your rights, including access to your
+              data and complaint to the DPC (www.dataprotection.ie), are unaffected. Contact
+              [practice contact] with any concerns.”
+            </p>
+          </div>
+
           <div>
             <AppButton
               size="sm"
-              variant="danger"
               onClick={() => {
-                const sample = state.patients[0];
-                if (!sample) return;
-                const age = ageFromDob(sample.dob);
-                const yearsOnFile = (Date.now() - new Date(sample.createdAt).getTime()) / (365 * 86400000);
-                if (age >= 18 && yearsOnFile < 8) {
-                  setEraseError(`Cannot erase ${patientName(sample)}: adult records retained 8 years.`);
-                  return;
-                }
-                setEraseError('Erasure workflow recorded (demo — record retained).');
+                const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'curam-gdpr-export.json';
+                a.click();
               }}
             >
-              Test right-to-erasure
+              Export workspace (JSON)
             </AppButton>
-            {eraseError && <p className="mt-2 text-xs text-amber-700">{eraseError}</p>}
+            <p className="mt-1 text-[11px] text-slate-400">
+              Patients export their own data from MyCúram (or via the patient-data-export endpoint).
+            </p>
           </div>
           <AppButton size="sm" variant="ghost" onClick={() => appStore.resetDemo()}>
             Reset demo data

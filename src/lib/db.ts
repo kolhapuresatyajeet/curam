@@ -36,7 +36,8 @@ export async function fetchPractice(practiceId: string): Promise<PracticeRow | n
 
 export async function fetchPatients(): Promise<Patient[]> {
   if (!supabase) return [];
-  const { data, error } = await supabase.from('patients').select('*').order('last_name');
+  // Bounded page size — the list UI paginates client-side from here.
+  const { data, error } = await supabase.from('patients').select('*').order('last_name').limit(1000);
   if (error || !data) return [];
   return (data as PatientRow[]).map(patientFromRow);
 }
@@ -88,7 +89,7 @@ export async function fetchStaffMembers(): Promise<Staff[]> {
 
 export async function fetchInvoices(): Promise<Invoice[]> {
   if (!supabase) return [];
-  const { data, error } = await supabase.from('invoices').select('*').order('issued_at', { ascending: false });
+  const { data, error } = await supabase.from('invoices').select('*').order('issued_at', { ascending: false }).limit(500);
   if (error || !data) return [];
   return (data as InvoiceRow[]).map(invoiceFromRow);
 }
