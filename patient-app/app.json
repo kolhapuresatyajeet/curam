@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "MyCúram",
+    "slug": "mycuram",
+    "version": "0.1.0",
+    "scheme": "mycuram",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "ie.curam.patient"
+    },
+    "android": {
+      "package": "ie.curam.patient"
+    },
+    "extra": {
+      "supabaseUrl": "https://duphvinfwkskjkfqaetr.supabase.co",
+      "supabaseAnonKey": ""
+    }
+  }
+}
