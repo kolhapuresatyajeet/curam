@@ -90,6 +90,7 @@ export function staffFromRow(row: StaffRow): Staff {
     googleEmail: row.google_email ?? undefined,
     googleCalendarId: row.google_calendar_id ?? undefined,
     googleCalendarSummary: row.google_calendar_summary ?? undefined,
+    invited: !row.user_id,
   };
 }
 

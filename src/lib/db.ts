@@ -110,6 +110,28 @@ export async function fetchStripeConnected(): Promise<boolean> {
   return Boolean(data?.stripe_secret_id);
 }
 
+/** Admin (gp/pm) onboards a staff member: DB row with user_id null until they sign in. */
+export async function inviteStaffMember(input: { practiceId: string; name: string; role: Staff['role']; email: string }) {
+  if (!supabase) return { error: new Error('Supabase is not configured') };
+  const { error } = await supabase.from('staff').insert({
+    practice_id: input.practiceId,
+    name: input.name,
+    role: input.role,
+    email: input.email,
+    sessions: 'TBC',
+    permissions: [input.role],
+    active: true,
+  });
+  return { error };
+}
+
+/** Invitee claims their staff slot on first sign-in (matches by email). */
+export async function claimStaffSlot(email: string): Promise<boolean> {
+  if (!supabase) return false;
+  const { data, error } = await supabase.rpc('claim_staff_slot', { p_email: email });
+  return !error && Boolean(data);
+}
+
 export async function fetchAppointments(): Promise<Appointment[]> {
   if (!supabase) return [];
   const { data, error } = await supabase.from('appointments').select('*').order('start_time');

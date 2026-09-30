@@ -1,5 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { fetchPractice, fetchStaffForUser } from "@/lib/db";
+import { claimStaffSlot, fetchPractice, fetchStaffForUser } from "@/lib/db";
 import { supabase, supabaseConfigured } from "@/lib/supabase";
 import { appStore } from "@/stores/appStore";
 import type { Staff } from "@/types/domain";
@@ -45,7 +45,12 @@ async function hydrate(
     emit();
     return;
   }
-  const staff = await fetchStaffForUser(userId);
+  let staff = await fetchStaffForUser(userId);
+  if (!staff && email) {
+    // First sign-in after being invited: claim the staff slot matched by email.
+    const claimed = await claimStaffSlot(email);
+    if (claimed) staff = await fetchStaffForUser(userId);
+  }
   if (staff) {
     const practice = await fetchPractice(staff.practiceId);
     appStore.upsertStaff(staff);
