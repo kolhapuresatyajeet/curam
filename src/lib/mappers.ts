@@ -3,6 +3,8 @@ import type {
   AppointmentStatus,
   AppointmentType,
   Gender,
+  Invoice,
+  InvoiceStatus,
   MedicalCardType,
   Patient,
   Role,
@@ -207,5 +209,43 @@ export function waitingFromRow(row: WaitingRoomRow): WaitingRoomEntry {
     calledInAt: row.called_in_at ?? undefined,
     completedAt: row.completed_at ?? undefined,
     waitMinutes: row.wait_minutes ?? 0,
+  };
+}
+
+export interface InvoiceRow {
+  id: string;
+  practice_id: string;
+  patient_id: string;
+  appointment_id: string | null;
+  staff_id: string | null;
+  billing_source: string | null;
+  amount: number | string | null;
+  paid_amount: number | string | null;
+  status: string | null;
+  pcrs_claim_id: string | null;
+  insurer_claim_ref: string | null;
+  stripe_payment_id: string | null;
+  payment_link_url: string | null;
+  description: string | null;
+  issued_at: string | null;
+}
+
+export function invoiceFromRow(row: InvoiceRow): Invoice {
+  return {
+    id: row.id,
+    practiceId: row.practice_id,
+    patientId: row.patient_id,
+    appointmentId: row.appointment_id ?? undefined,
+    staffId: row.staff_id ?? '',
+    billingSource: (row.billing_source ?? 'private') as Invoice['billingSource'],
+    amount: Number(row.amount ?? 0),
+    paidAmount: Number(row.paid_amount ?? 0),
+    status: (row.status ?? 'unbilled') as InvoiceStatus,
+    pcrsClaimId: row.pcrs_claim_id ?? undefined,
+    insurerClaimRef: row.insurer_claim_ref ?? undefined,
+    stripePaymentId: row.stripe_payment_id ?? undefined,
+    paymentLinkUrl: row.payment_link_url ?? undefined,
+    description: row.description ?? undefined,
+    issuedAt: row.issued_at ?? new Date().toISOString(),
   };
 }

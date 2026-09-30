@@ -274,6 +274,8 @@ export interface Invoice {
   pcrsClaimId?: string;
   insurerClaimRef?: string;
   stripePaymentId?: string;
+  paymentLinkUrl?: string;
+  description?: string;
   issuedAt: string;
 }
 

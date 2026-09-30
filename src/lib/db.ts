@@ -1,18 +1,20 @@
 import {
   appointmentFromRow,
   appointmentToRow,
+  invoiceFromRow,
   patientFromRow,
   patientToRow,
   staffFromRow,
   waitingFromRow,
   type AppointmentRow,
+  type InvoiceRow,
   type PatientRow,
   type PracticeRow,
   type StaffRow,
   type WaitingRoomRow,
 } from '@/lib/mappers';
 import { supabase } from '@/lib/supabase';
-import type { Appointment, AppointmentStatus, Patient, Staff, WaitingRoomEntry } from '@/types/domain';
+import type { Appointment, AppointmentStatus, Invoice, Patient, Staff, WaitingRoomEntry } from '@/types/domain';
 
 export async function fetchStaffForUser(userId: string): Promise<Staff | null> {
   if (!supabase) return null;
@@ -78,6 +80,22 @@ export async function fetchStaffMembers(): Promise<Staff[]> {
   const { data, error } = await supabase.from('staff').select('*').eq('active', true);
   if (error || !data) return [];
   return (data as StaffRow[]).map(staffFromRow);
+}
+
+export async function fetchInvoices(): Promise<Invoice[]> {
+  if (!supabase) return [];
+  const { data, error } = await supabase.from('invoices').select('*').order('issued_at', { ascending: false });
+  if (error || !data) return [];
+  return (data as InvoiceRow[]).map(invoiceFromRow);
+}
+
+export async function updateInvoicePayment(invoiceId: string, paidAmount: number, status: Invoice['status']) {
+  if (!supabase) return { error: new Error('Supabase is not configured') };
+  const { error } = await supabase
+    .from('invoices')
+    .update({ paid_amount: paidAmount, status })
+    .eq('id', invoiceId);
+  return { error };
 }
 
 export async function fetchAppointments(): Promise<Appointment[]> {

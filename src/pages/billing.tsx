@@ -1,18 +1,77 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppButton, Badge, SectionTitle, TableShell, Tabs } from '@/components/shared/ui';
+import { fetchInvoices, updateInvoicePayment } from '@/lib/db';
+import { createPaymentLinkRemote } from '@/lib/stripe';
+import { supabaseConfigured } from '@/lib/supabase';
 import { formatEur, formatIrishDate } from '@/lib/utils';
-import { paymentLinkUrl } from '@/lib/stripe';
 import { appStore, useAppState } from '@/stores/appStore';
-import { patientName, type InvoiceStatus } from '@/types/domain';
+import { patientName, type Invoice, type InvoiceStatus } from '@/types/domain';
 
 function agingDays(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+}
+
+function LinkCell({ invoice }: { invoice: Invoice }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  if (invoice.paymentLinkUrl) {
+    return (
+      <button
+        type="button"
+        className="text-[11px] text-teal-700 underline"
+        onClick={() => {
+          void navigator.clipboard.writeText(invoice.paymentLinkUrl!);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }}
+      >
+        {copied ? 'Copied!' : 'Copy link'}
+      </button>
+    );
+  }
+  if (invoice.billingSource === 'gms' || invoice.amount - invoice.paidAmount <= 0) return null;
+
+  return (
+    <span className="flex flex-col items-start gap-1">
+      <AppButton
+        size="sm"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setError('');
+          const result = await createPaymentLinkRemote(invoice.id);
+          setBusy(false);
+          if (result.ok) {
+            appStore.upsertInvoices([{ ...invoice, paymentLinkUrl: result.url }]);
+          } else {
+            setError(result.error);
+          }
+        }}
+      >
+        {busy ? 'Creating…' : 'Payment link'}
+      </AppButton>
+      {error && <span className="text-[10px] text-red-600">{error}</span>}
+    </span>
+  );
 }
 
 export default function BillingPage() {
   const state = useAppState();
   const [tab, setTab] = useState('Overview');
   const [status, setStatus] = useState<InvoiceStatus | 'all'>('all');
+  const [loaded, setLoaded] = useState(false);
+
+  // Pull real invoices from Supabase (including auto-invoices created by the DB trigger).
+  useEffect(() => {
+    if (!supabaseConfigured || loaded) return;
+    setLoaded(true);
+    void fetchInvoices().then((invoices) => {
+      if (invoices.length) appStore.upsertInvoices(invoices);
+    });
+  }, [loaded]);
+
   const invoices = useMemo(
     () => state.invoices.filter((item) => status === 'all' || item.status === status),
     [state.invoices, status],
@@ -43,6 +102,7 @@ export default function BillingPage() {
                 <th>Unpaid</th>
                 <th>Aging</th>
                 <th>Status</th>
+                <th>Pay online</th>
                 <th />
               </tr>
             </thead>
@@ -64,8 +124,21 @@ export default function BillingPage() {
                       <Badge tone={inv.status === 'paid' ? 'teal' : inv.status === 'rejected' ? 'coral' : 'amber'}>{inv.status}</Badge>
                     </td>
                     <td>
+                      <LinkCell invoice={inv} />
+                    </td>
+                    <td>
                       {unpaid > 0 && (
-                        <AppButton size="sm" onClick={() => appStore.payInvoice(inv.id, unpaid)}>
+                        <AppButton
+                          size="sm"
+                          onClick={() => {
+                            const newPaid = Math.min(inv.paidAmount + unpaid, inv.amount);
+                            const newStatus = newPaid >= inv.amount ? 'paid' : 'partial';
+                            appStore.payInvoice(inv.id, unpaid);
+                            if (supabaseConfigured) {
+                              void updateInvoicePayment(inv.id, newPaid, newStatus);
+                            }
+                          }}
+                        >
                           Record payment
                         </AppButton>
                       )}
@@ -108,9 +181,17 @@ export default function BillingPage() {
       )}
       {tab === 'Payments' && (
         <div className="surface divide-y rounded-xl">
-          {state.invoices.filter((i) => i.paidAmount > 0).map((inv) => (
-            <div key={inv.id} className="px-4 py-3 text-xs">
-              {inv.stripePaymentId} · {formatEur(inv.paidAmount)} · link {paymentLinkUrl(inv.id, inv.amount - inv.paidAmount)}
+          {state.invoices.filter((i) => i.paidAmount > 0 || i.paymentLinkUrl).map((inv) => (
+            <div key={inv.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-xs">
+              <span className="flex-1">
+                {inv.stripePaymentId ? `Stripe ${inv.stripePaymentId} · ` : ''}
+                {formatEur(inv.paidAmount)} of {formatEur(inv.amount)} · {inv.description ?? 'invoice'}
+              </span>
+              {inv.paymentLinkUrl && (
+                <a className="text-[11px] text-teal-700 underline" href={inv.paymentLinkUrl} target="_blank" rel="noreferrer">
+                  Open payment page
+                </a>
+              )}
             </div>
           ))}
         </div>

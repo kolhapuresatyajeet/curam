@@ -172,6 +172,16 @@ export const appStore = {
       return { ...current, appointments: [...map.values()] };
     });
   },
+  upsertInvoices(items: Invoice[]) {
+    setState((current) => {
+      const map = new Map(current.invoices.map((inv) => [inv.id, inv]));
+      items.forEach((item) => map.set(item.id, item));
+      return {
+        ...current,
+        invoices: [...map.values()].sort((a, b) => b.issuedAt.localeCompare(a.issuedAt)),
+      };
+    });
+  },
   setAppointmentStatus(appointmentId: string, status: AppointmentStatus) {
     const existing = state.appointments.find((item) => item.id === appointmentId);
     setState((current) => ({

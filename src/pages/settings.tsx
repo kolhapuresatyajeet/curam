@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AppButton, Badge, Field, SectionTitle, Tabs, inputClass } from '@/components/shared/ui';
 import { connectGoogleCalendar, disconnectGoogleCalendar } from '@/lib/google-calendar';
+import { saveStripeKeyRemote } from '@/lib/stripe';
 import { refreshSchedule } from '@/lib/schedule';
 import { useSupabaseAuth } from '@/stores/authSession';
 import { formatIrishDateTime } from '@/lib/utils';
@@ -42,6 +43,14 @@ export default function SettingsPage() {
       )}
       {tab === 'Integrations' && (
         <div className="space-y-4">
+          <div className="surface max-w-lg space-y-3 rounded-xl p-4">
+            <div className="text-sm font-semibold">Stripe — online payments</div>
+            <p className="text-[12px] text-slate-600">
+              Paste the practice's own Stripe secret key (Developers → API keys). It is stored encrypted in the Supabase Vault and
+              never leaves the server. Patients pay invoices through secure Stripe-hosted payment pages.
+            </p>
+            <StripeKeyForm />
+          </div>
           <div className="surface max-w-lg space-y-3 rounded-xl p-4">
             <div className="text-sm font-semibold">Google Calendar</div>
             <p className="text-[12px] text-slate-600">
@@ -163,5 +172,47 @@ export default function SettingsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function StripeKeyForm() {
+  const [publishable, setPublishable] = useState('');
+  const [secret, setSecret] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void (async () => {
+          setError('');
+          setBusy(true);
+          const result = await saveStripeKeyRemote(publishable, secret);
+          setBusy(false);
+          if (result.ok) {
+            setSaved(true);
+            setSecret('');
+            setTimeout(() => setSaved(false), 3000);
+          } else {
+            setError(result.error);
+          }
+        })();
+      }}
+    >
+      <Field label="Publishable key (pk_…)">
+        <input className={inputClass} value={publishable} onChange={(e) => setPublishable(e.target.value)} placeholder="pk_live_… or pk_test_…" />
+      </Field>
+      <Field label="Secret key (sk_…)">
+        <input className={inputClass} type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="sk_live_… or sk_test_…" required />
+      </Field>
+      <AppButton type="submit" size="sm" variant="primary" disabled={busy}>
+        {busy ? 'Saving…' : 'Save Stripe key'}
+      </AppButton>
+      {saved && <p className="text-xs text-teal-700">Stripe key stored in the vault.</p>}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </form>
   );
 }
