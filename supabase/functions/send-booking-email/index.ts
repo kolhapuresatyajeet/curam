@@ -20,5 +20,11 @@ Deno.serve(async (req) => {
 
   const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
   const result = await notifyAppointmentEmails(admin, appointmentId, kind);
+  try {
+    const { notifyAppointmentSms } = await import('../_shared/sms.ts');
+    await notifyAppointmentSms(admin, appointmentId, kind);
+  } catch {
+    /* SMS must never fail the request */
+  }
   return json(result);
 });

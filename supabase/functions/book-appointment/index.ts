@@ -151,6 +151,12 @@ Deno.serve(async (req) => {
   } catch {
     /* Patient/GP email must never fail the booking */
   }
+  try {
+    const { notifyAppointmentSms } = await import('../_shared/sms.ts');
+    await notifyAppointmentSms(admin, appointment.id, 'booked');
+  } catch {
+    /* SMS must never fail the booking */
+  }
 
   if (bookedVia === 'sile') {
     await admin.from('sile_calls').insert({

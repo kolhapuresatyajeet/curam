@@ -146,6 +146,12 @@ Deno.serve(async (req) => {
     } catch {
       /* Patient email is independent of GP email */
     }
+    try {
+      const { notifyAppointmentSms } = await import('../_shared/sms.ts');
+      await notifyAppointmentSms(admin, existing.id, 'cancelled');
+    } catch {
+      /* SMS must never fail the cancellation */
+    }
 
     await admin.from('sile_calls').insert({
       practice_id: patient.practice_id,
@@ -226,6 +232,12 @@ Deno.serve(async (req) => {
     await notifyAppointmentEmails(admin, appointment.id, 'booked');
   } catch {
     /* Patient email is independent of GP email */
+  }
+  try {
+    const { notifyAppointmentSms } = await import('../_shared/sms.ts');
+    await notifyAppointmentSms(admin, appointment.id, 'booked');
+  } catch {
+    /* SMS must never fail the booking */
   }
 
   await admin.from('sile_calls').insert({
