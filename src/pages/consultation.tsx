@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useLocation, useParams } from 'wouter';
 import { AppButton, Field, SectionTitle, inputClass } from '@/components/shared/ui';
-import { draftSoapFromTranscript, suggestIcpc2 } from '@/lib/ai-scribe';
+import { draftSoapFromTranscript, structureSoapRemote, suggestIcpc2 } from '@/lib/ai-scribe';
 import { id, nowIso } from '@/lib/utils';
 import { consultationStore, useConsultationStore } from '@/stores/consultationStore';
 import { appStore, useAppState, useSessionStaff } from '@/stores/appStore';
@@ -21,6 +21,11 @@ export default function ConsultationPage() {
   const staff = useSessionStaff();
   const ui = useConsultationStore();
   const patient = state.patients.find((item) => item.id === params.id);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [structuring, setStructuring] = useState(false);
+  const [scribeError, setScribeError] = useState('');
 
   const existing = useMemo(() => {
     const match = window.location.search.match(/id=([^&]+)/);
@@ -99,33 +104,75 @@ export default function ConsultationPage() {
         </label>
         <AppButton
           size="sm"
-          disabled={!ui.consent}
-          onClick={() => {
-            consultationStore.setRecording(!ui.recording);
+          disabled={!ui.consent || structuring}
+          onClick={async () => {
+            setScribeError('');
             if (!ui.recording) {
-              patch({
-                aiTranscript:
-                  note.aiTranscript ||
-                  'Patient describes tiredness and increased thirst. Blood pressure mentioned as high at home. No chest pain or breathing difficulty.',
-              });
+              // Start real audio capture
+              try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                chunksRef.current = [];
+                const recorder = new MediaRecorder(stream);
+                recorder.ondataavailable = (event) => {
+                  if (event.data.size > 0) chunksRef.current.push(event.data);
+                };
+                recorder.onstop = () => {
+                  setAudioBlob(new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' }));
+                  stream.getTracks().forEach((track) => track.stop());
+                };
+                recorder.start();
+                recorderRef.current = recorder;
+                consultationStore.setRecording(true);
+              } catch {
+                setScribeError('Microphone access denied. Type the transcript below instead.');
+              }
+              return;
             }
+            // Stop capture
+            recorderRef.current?.stop();
+            recorderRef.current = null;
+            consultationStore.setRecording(false);
           }}
         >
-          {ui.recording ? 'Stop capture' : 'Start capture'}
+          {ui.recording ? 'Stop capture' : audioBlob ? 'Re-record' : 'Start capture'}
         </AppButton>
-        <textarea className={`${inputClass} mt-3 h-40 py-2`} value={note.aiTranscript} onChange={(e) => patch({ aiTranscript: e.target.value })} placeholder="Live transcript" />
+        {audioBlob && !ui.recording && (
+          <p className="text-[11px] text-slate-500">Recording captured ({Math.max(1, Math.round(audioBlob.size / 32_000))}s). Structuring will transcribe it.</p>
+        )}
+        <textarea className={`${inputClass} mt-3 h-40 py-2`} value={note.aiTranscript} onChange={(e) => patch({ aiTranscript: e.target.value })} placeholder="Live transcript (filled after capture, or type notes to structure)" />
         <AppButton
           size="sm"
           variant="primary"
-          onClick={() => {
+          disabled={structuring || (!audioBlob && !note.aiTranscript.trim())}
+          onClick={async () => {
+            setScribeError('');
+            setStructuring(true);
             appStore.saveConsultation({ ...note, aiScribeUsed: true });
-            const result = appStore.generateAiSoap(note.id, note.aiTranscript, patient.id);
-            const draft = result.draft ?? draftSoapFromTranscript(note.aiTranscript, '');
-            patch({ aiDraftNote: draft, icpc2Codes: result.codes ?? suggestIcpc2(note.aiTranscript), aiScribeUsed: true });
+            const remote = await structureSoapRemote({
+              patientId: patient.id,
+              transcript: audioBlob ? undefined : note.aiTranscript,
+              audio: audioBlob,
+            });
+            setStructuring(false);
+            if (remote.ok) {
+              patch({
+                aiTranscript: remote.result.transcript || note.aiTranscript,
+                aiDraftNote: remote.result.draft,
+                icpc2Codes: remote.result.codes.length ? remote.result.codes : suggestIcpc2(remote.result.transcript || note.aiTranscript),
+                aiScribeUsed: true,
+              });
+            } else {
+              // Fallback to the local heuristic draft so the GP is never blocked.
+              setScribeError(`${remote.error} Using local draft instead.`);
+              const result = appStore.generateAiSoap(note.id, note.aiTranscript, patient.id);
+              const draft = result.draft ?? draftSoapFromTranscript(note.aiTranscript, '');
+              patch({ aiDraftNote: draft, icpc2Codes: result.codes ?? suggestIcpc2(note.aiTranscript), aiScribeUsed: true });
+            }
           }}
         >
-          Structure SOAP
+          {structuring ? 'Structuring…' : 'Structure SOAP'}
         </AppButton>
+        {scribeError && <p className="text-[11px] text-amber-700">{scribeError}</p>}
         {note.aiDraftNote && (
           <div className="mt-3 rounded-lg bg-teal-50 p-3 text-[11px] text-slate-600">
             <p className="font-semibold">AI draft (unapproved)</p>

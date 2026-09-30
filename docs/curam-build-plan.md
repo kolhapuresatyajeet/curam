@@ -376,6 +376,26 @@ Build the workflow automation engine:
 
 ---
 
+## Phase 3.5 — AI Scribe Model Upgrade Roadmap (ongoing)
+
+The AI scribe ships with a cost-optimised baseline and is upgraded as volume justifies. Every upgrade is a settings/secret change — no code rewrite.
+
+**Baseline (Phase 3 build):**
+- Transcription: OpenAI `gpt-4o-mini-transcribe` (~$0.003/min) — EU data residency
+- Structuring: Claude Haiku 4.5 (~$0.01/consult) with prompt caching for patient context
+- Metering: every call logged to `ai_usage_log` (audio seconds, tokens, millicent cost)
+- Guardrails: per-practice monthly cap (`AI_MONTHLY_CAP_CENTS`), silence trimming, single structuring call per consult, no audio retention by default
+
+**Upgrade triggers (each unlocks the next tier):**
+1. **Drug-name / accent errors reported by GPs** → switch transcription to AssemblyAI Medical Mode ($0.36/hr) or Deepgram Nova-3 Medical — clinical-tuned models with ~20% fewer missed medical entities
+2. **Draft quality complaints** → Claude Sonnet 5 for structuring (~2x cost, still < €0.05/consult)
+3. **Volume > 50 practices** → self-host Whisper large-v3-turbo on EU GPU (Hetzner, ~€40/mo) — breaks even at scale, adds ops burden
+4. **Latency matters** → streaming transcription (gpt-live-transcribe or Deepgram streaming) for live transcript during the consult
+
+**Pricing review cadence:** quarterly — the transcription market reprices fast (AssemblyAI cut 43% in 2026; OpenAI mini models halved twice since 2024).
+
+---
+
 ## Phase 4 — HealthLink Bridge (Weeks 21-26)
 
 ### Sprint 11-13: HealthLink Bridge Agent (Weeks 21-26)
