@@ -2,6 +2,8 @@ import type {
   Appointment,
   AppointmentStatus,
   AppointmentType,
+  CdmEnrolment,
+  CdmReview,
   Gender,
   Invoice,
   InvoiceStatus,
@@ -64,6 +66,7 @@ export interface PatientRow {
   smoking_status: string | null;
   gdpr_consent: boolean | null;
   sile_consent: boolean | null;
+  chronic_conditions?: string[] | null;
   created_at: string;
 }
 
@@ -119,11 +122,14 @@ export function patientFromRow(row: PatientRow): Patient {
     smokingStatus: (row.smoking_status as SmokingStatus) || 'unknown',
     gdprConsent: Boolean(row.gdpr_consent),
     sileConsent: Boolean(row.sile_consent),
+    chronicConditions: Array.isArray(row.chronic_conditions) ? row.chronic_conditions.map(String) : [],
     colour: tone,
     createdAt: row.created_at,
   };
 }
 
+// chronic_conditions is managed by the CDM module (see db.ts
+// updatePatientConditions), not by generic patient edits.
 export function patientToRow(patient: Patient) {
   return {
     id: patient.id,
@@ -252,5 +258,61 @@ export function invoiceFromRow(row: InvoiceRow): Invoice {
     paymentMethod: (row.payment_method ?? undefined) as Invoice['paymentMethod'],
     description: row.description ?? undefined,
     issuedAt: row.issued_at ?? new Date().toISOString(),
+  };
+}
+
+// ---------- CDM programme ----------
+
+export interface CdmEnrolmentRow {
+  id: string;
+  practice_id: string | null;
+  patient_id: string;
+  condition: string | null;
+  enrolled_date: string | null;
+  consent_signed: boolean | null;
+  status: string | null;
+  next_review_date: string | null;
+}
+
+export function cdmEnrolmentFromRow(row: CdmEnrolmentRow): CdmEnrolment {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    condition: (row.condition ?? 'dm2') as CdmEnrolment['condition'],
+    enrolledDate: row.enrolled_date ?? new Date().toISOString().slice(0, 10),
+    consentSigned: Boolean(row.consent_signed),
+    status: (row.status === 'withdrawn' ? 'withdrawn' : 'active'),
+    nextReviewDate: row.next_review_date ?? undefined,
+  };
+}
+
+export interface CdmReviewRow {
+  id: string;
+  practice_id: string | null;
+  patient_id: string;
+  enrolment_id: string | null;
+  reviewer_id: string | null;
+  review_type: string | null;
+  review_data_json: Record<string, unknown> | null;
+  cdr_submitted: boolean | null;
+  pcrs_claim_id: string | null;
+  completed_at: string | null;
+  nurse_signed: boolean | null;
+  gp_signed: boolean | null;
+}
+
+export function cdmReviewFromRow(row: CdmReviewRow): CdmReview {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    enrolmentId: row.enrolment_id ?? '',
+    reviewerId: row.reviewer_id ?? '',
+    reviewType: (row.review_type === 'gp' ? 'gp' : 'nurse'),
+    reviewData: (row.review_data_json ?? {}) as CdmReview['reviewData'],
+    cdrSubmitted: Boolean(row.cdr_submitted),
+    pcrsClaimId: row.pcrs_claim_id ?? undefined,
+    completedAt: row.completed_at ?? undefined,
+    nurseSigned: Boolean(row.nurse_signed),
+    gpSigned: Boolean(row.gp_signed),
   };
 }

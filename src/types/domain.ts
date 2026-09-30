@@ -125,6 +125,7 @@ export interface Patient {
   gdprConsent: boolean;
   sileConsent: boolean;
   insurer?: BillingSource;
+  chronicConditions?: string[];
   colour: Tone;
   createdAt: string;
 }
@@ -223,6 +224,7 @@ export interface CdmEnrolment {
   enrolledDate: string;
   consentSigned: boolean;
   status: 'active' | 'withdrawn';
+  nextReviewDate?: string;
 }
 
 export interface CdmReview {

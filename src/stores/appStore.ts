@@ -9,6 +9,8 @@ import { id, nowIso } from '@/lib/utils';
 import type {
   Appointment,
   AppointmentStatus,
+  CdmEnrolment,
+  CdmReview,
   Consultation,
   Invoice,
   LabResult,
@@ -180,6 +182,20 @@ export const appStore = {
         ...current,
         invoices: [...map.values()].sort((a, b) => b.issuedAt.localeCompare(a.issuedAt)),
       };
+    });
+  },
+  upsertCdmEnrolments(items: CdmEnrolment[]) {
+    setState((current) => {
+      const map = new Map(current.cdmEnrolments.map((e) => [e.id, e]));
+      items.forEach((item) => map.set(item.id, item));
+      return { ...current, cdmEnrolments: [...map.values()] };
+    });
+  },
+  upsertCdmReviews(items: CdmReview[]) {
+    setState((current) => {
+      const map = new Map(current.cdmReviews.map((r) => [r.id, r]));
+      items.forEach((item) => map.set(item.id, item));
+      return { ...current, cdmReviews: [...map.values()] };
     });
   },
   setAppointmentStatus(appointmentId: string, status: AppointmentStatus) {

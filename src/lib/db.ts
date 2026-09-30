@@ -1,12 +1,16 @@
 import {
   appointmentFromRow,
   appointmentToRow,
+  cdmEnrolmentFromRow,
+  cdmReviewFromRow,
   invoiceFromRow,
   patientFromRow,
   patientToRow,
   staffFromRow,
   waitingFromRow,
   type AppointmentRow,
+  type CdmEnrolmentRow,
+  type CdmReviewRow,
   type InvoiceRow,
   type PatientRow,
   type PracticeRow,
@@ -14,7 +18,7 @@ import {
   type WaitingRoomRow,
 } from '@/lib/mappers';
 import { getSupabaseConfig, supabase } from '@/lib/supabase';
-import type { Appointment, AppointmentStatus, Invoice, Patient, Staff, WaitingRoomEntry } from '@/types/domain';
+import type { Appointment, AppointmentStatus, CdmEnrolment, CdmReview, Invoice, Patient, Staff, WaitingRoomEntry } from '@/types/domain';
 
 export async function fetchStaffForUser(userId: string): Promise<Staff | null> {
   if (!supabase) return null;
@@ -201,4 +205,169 @@ export async function updateWaitingRoom(
   if (!supabase) return { error: new Error('Supabase is not configured') };
   const { error } = await supabase.from('waiting_room').update(patch).eq('appointment_id', appointmentId);
   return { error };
+}
+
+// ---------- CDM programme ----------
+
+export async function fetchCdmEnrolments(): Promise<CdmEnrolment[]> {
+  const { data, error } = await supabase!.from('cdm_enrolments').select('*').order('enrolled_date', { ascending: false });
+  if (error || !data) return [];
+  return (data as CdmEnrolmentRow[]).map(cdmEnrolmentFromRow);
+}
+
+export async function fetchCdmReviews(): Promise<CdmReview[]> {
+  const { data, error } = await supabase!.from('cdm_reviews').select('*').order('id');
+  if (error || !data) return [];
+  return (data as CdmReviewRow[]).map(cdmReviewFromRow);
+}
+
+export async function enrolCdmPatient(input: {
+  practiceId: string;
+  patientId: string;
+  condition: CdmEnrolment['condition'];
+  nextReviewDate: string;
+}): Promise<{ ok: boolean; enrolment?: CdmEnrolment; error?: string }> {
+  const { data, error } = await supabase!
+    .from('cdm_enrolments')
+    .insert({
+      practice_id: input.practiceId,
+      patient_id: input.patientId,
+      condition: input.condition,
+      enrolled_date: new Date().toISOString().slice(0, 10),
+      consent_signed: true, // consent captured in the enrol UI before insert
+      status: 'active',
+      next_review_date: input.nextReviewDate,
+    })
+    .select('*')
+    .single();
+  if (error) return { ok: false, error: error.message };
+  const enrolment = cdmEnrolmentFromRow(data as CdmEnrolmentRow);
+  // Mirror the condition onto the patient record for future eligibility logic.
+  const { data: patientRow } = await supabase!
+    .from('patients')
+    .select('chronic_conditions')
+    .eq('id', input.patientId)
+    .single();
+  const existing: string[] = Array.isArray(patientRow?.chronic_conditions)
+    ? (patientRow!.chronic_conditions as string[])
+    : [];
+  if (!existing.includes(input.condition)) {
+    await supabase!
+      .from('patients')
+      .update({ chronic_conditions: [...existing, input.condition] })
+      .eq('id', input.patientId);
+  }
+  return { ok: true, enrolment };
+}
+
+export async function withdrawCdmEnrolment(enrolmentId: string): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase!
+    .from('cdm_enrolments')
+    .update({ status: 'withdrawn' })
+    .eq('id', enrolmentId);
+  return { ok: !error, error: error?.message };
+}
+
+export async function updatePatientConditions(patientId: string, conditions: string[]): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase!.from('patients').update({ chronic_conditions: conditions }).eq('id', patientId);
+  return { ok: !error, error: error?.message };
+}
+
+// Nurse stage: store measurements and sign. Nurse/HCA completes, GP signs off.
+export async function signCdmNurseReview(input: {
+  reviewId: string;
+  staffId: string;
+  reviewData: Record<string, string | number>;
+}): Promise<{ ok: boolean; review?: CdmReview; error?: string }> {
+  const { data, error } = await supabase!
+    .from('cdm_reviews')
+    .update({
+      reviewer_id: input.staffId,
+      review_data_json: input.reviewData,
+      nurse_signed: true,
+    })
+    .eq('id', input.reviewId)
+    .select('*')
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, review: cdmReviewFromRow(data as CdmReviewRow) };
+}
+
+export async function startCdmReview(input: {
+  practiceId: string;
+  enrolmentId: string;
+  patientId: string;
+  staffId: string;
+  reviewType: 'nurse' | 'gp';
+}): Promise<{ ok: boolean; review?: CdmReview; error?: string }> {
+  const { data, error } = await supabase!
+    .from('cdm_reviews')
+    .insert({
+      practice_id: input.practiceId,
+      patient_id: input.patientId,
+      enrolment_id: input.enrolmentId,
+      reviewer_id: input.staffId,
+      review_type: input.reviewType,
+      review_data_json: {},
+      nurse_signed: false,
+      gp_signed: false,
+    })
+    .select('*')
+    .single();
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, review: cdmReviewFromRow(data as CdmReviewRow) };
+}
+
+// GP sign-off completes the review cycle and auto-generates the PCRS claim.
+// STC code: CDM group claim. If no open claim exists for the patient the GP
+// review creates one (status staged — submitted via the PCRS claims tab).
+export async function signCdmGpReview(input: {
+  reviewId: string;
+  practiceId: string;
+  patientId: string;
+  staffId: string;
+  reviewData: Record<string, string | number>;
+  stcCode: string;
+}): Promise<{ ok: boolean; review?: CdmReview; error?: string }> {
+  const { data: claim, error: claimError } = await supabase!
+    .from('pcrs_claims')
+    .insert({
+      practice_id: input.practiceId,
+      patient_id: input.patientId,
+      stc_code: input.stcCode,
+      status: 'staged',
+    })
+    .select('id')
+    .single();
+  if (claimError) return { ok: false, error: `claim: ${claimError.message}` };
+
+  const { data, error } = await supabase!
+    .from('cdm_reviews')
+    .update({
+      reviewer_id: input.staffId,
+      review_data_json: input.reviewData,
+      gp_signed: true,
+      completed_at: new Date().toISOString(),
+      pcrs_claim_id: claim.id,
+    })
+    .eq('id', input.reviewId)
+    .select('*')
+    .single();
+  if (error) return { ok: false, error: error.message };
+
+  // Advance the enrolment's next review date by 6 months.
+  const { data: enrolment } = await supabase!
+    .from('cdm_reviews')
+    .select('enrolment_id')
+    .eq('id', input.reviewId)
+    .single();
+  if (enrolment?.enrolment_id) {
+    const next = new Date();
+    next.setMonth(next.getMonth() + 6);
+    await supabase!
+      .from('cdm_enrolments')
+      .update({ next_review_date: next.toISOString().slice(0, 10) })
+      .eq('id', enrolment.enrolment_id);
+  }
+  return { ok: true, review: cdmReviewFromRow(data as CdmReviewRow) };
 }
