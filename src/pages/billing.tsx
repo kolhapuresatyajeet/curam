@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AppButton, Badge, SectionTitle, TableShell, Tabs } from '@/components/shared/ui';
 import { fetchInvoices, fetchStripeConnected, updateInvoicePayment } from '@/lib/db';
 import { createPaymentLinkRemote } from '@/lib/stripe';
+import { openReceipt } from '@/lib/receipt';
 import { supabaseConfigured } from '@/lib/supabase';
 import { formatEur, formatIrishDate } from '@/lib/utils';
 import { appStore, useAppState } from '@/stores/appStore';
@@ -107,6 +108,7 @@ export default function BillingPage() {
                 <th>Status</th>
                 <th>Pay online</th>
                 <th />
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -147,6 +149,17 @@ export default function BillingPage() {
                         </AppButton>
                       )}
                     </td>
+                    <td>
+                      {inv.paidAmount > 0 && patient && (
+                        <button
+                          type="button"
+                          className="text-[11px] text-teal-700 underline"
+                          onClick={() => openReceipt(inv, patient, state.practice)}
+                        >
+                          Receipt
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -169,15 +182,33 @@ export default function BillingPage() {
         </div>
       )}
       {tab === 'Insurer claims' && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3">
+          <div className="surface rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <div className="text-sm font-semibold text-amber-800">Direct insurer claims — coming soon</div>
+            <p className="mt-1 text-xs text-amber-700">
+              Automated claim submission to VHI, Laya Healthcare, Irish Life Health and Aviva is
+              in development. Each insurer currently requires its own format and portal — we are
+              building these one by one. In the meantime, use patient receipts to claim back fees.
+            </p>
+          </div>
+          <div className="surface rounded-xl p-4">
+            <div className="text-sm font-semibold">Claim back via patient receipt — available now</div>
+            <p className="mt-1 text-xs text-slate-500">
+              Open the <strong>Overview</strong> tab and click <strong>Receipt</strong> on any paid
+              invoice. Save the PDF (A5, practice letterhead, service, amount, payment method) and
+              upload it to the patient's insurer portal, or print/email it for the patient.
+            </p>
+          </div>
           {['vhi', 'laya', 'irish_life', 'aviva'].map((insurer) => {
             const list = state.invoices.filter((i) => i.billingSource === insurer);
             const total = list.reduce((s, i) => s + i.amount, 0);
             return (
-              <div key={insurer} className="surface rounded-xl p-4">
-                <div className="text-sm font-semibold capitalize">{insurer.replace('_', ' ')}</div>
-                <div className="text-xs text-slate-500">{list.length} claims · {formatEur(total)}</div>
-                <p className="mt-2 text-[11px] text-slate-400">Claim file generation is staged for portal upload. Automation comes after GPIT.</p>
+              <div key={insurer} className="surface flex items-center gap-3 rounded-xl p-4">
+                <div className="flex-1">
+                  <div className="text-sm font-semibold capitalize">{insurer.replace('_', ' ')}</div>
+                  <div className="text-xs text-slate-500">{list.length} invoices recorded · {formatEur(total)} · receipts available in Overview</div>
+                </div>
+                <Badge tone="amber">Coming soon</Badge>
               </div>
             );
           })}
@@ -185,19 +216,27 @@ export default function BillingPage() {
       )}
       {tab === 'Payments' && (
         <div className="surface divide-y rounded-xl">
-          {state.invoices.filter((i) => i.paidAmount > 0 || i.paymentLinkUrl).map((inv) => (
-            <div key={inv.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-xs">
-              <span className="flex-1">
-                {inv.stripePaymentId ? `Stripe ${inv.stripePaymentId} · ` : ''}
-                {formatEur(inv.paidAmount)} of {formatEur(inv.amount)} · {inv.description ?? 'invoice'}
-              </span>
-              {inv.paymentLinkUrl && (
-                <a className="text-[11px] text-teal-700 underline" href={inv.paymentLinkUrl} target="_blank" rel="noreferrer">
-                  Open payment page
-                </a>
-              )}
-            </div>
-          ))}
+          {state.invoices.filter((i) => i.paidAmount > 0 || i.paymentLinkUrl).map((inv) => {
+            const patient = state.patients.find((p) => p.id === inv.patientId);
+            return (
+              <div key={inv.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-xs">
+                <span className="flex-1">
+                  {inv.stripePaymentId ? `Stripe ${inv.stripePaymentId} · ` : ''}
+                  {formatEur(inv.paidAmount)} of {formatEur(inv.amount)} · {inv.description ?? 'invoice'}
+                </span>
+                {inv.paymentLinkUrl && (
+                  <a className="text-[11px] text-teal-700 underline" href={inv.paymentLinkUrl} target="_blank" rel="noreferrer">
+                    Open payment page
+                  </a>
+                )}
+                {inv.paidAmount > 0 && patient && (
+                  <button type="button" className="text-[11px] text-teal-700 underline" onClick={() => openReceipt(inv, patient, state.practice)}>
+                    Receipt
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
