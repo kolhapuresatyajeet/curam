@@ -99,6 +99,7 @@ export interface Staff {
   googleEmail?: string;
   googleCalendarId?: string;
   googleCalendarSummary?: string;
+  healthmailAddress?: string;
   invited?: boolean;
 }
 

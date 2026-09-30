@@ -13,7 +13,7 @@ import {
   type StaffRow,
   type WaitingRoomRow,
 } from '@/lib/mappers';
-import { supabase } from '@/lib/supabase';
+import { getSupabaseConfig, supabase } from '@/lib/supabase';
 import type { Appointment, AppointmentStatus, Invoice, Patient, Staff, WaitingRoomEntry } from '@/types/domain';
 
 export async function fetchStaffForUser(userId: string): Promise<Staff | null> {
@@ -130,6 +130,31 @@ export async function claimStaffSlot(email: string): Promise<boolean> {
   if (!supabase) return false;
   const { data, error } = await supabase.rpc('claim_staff_slot', { p_email: email });
   return !error && Boolean(data);
+}
+
+async function authedPost(path: string, body: Record<string, unknown>) {
+  if (!supabase) return { ok: false, payload: { error: 'Supabase is not configured' } };
+  const { url, anonKey } = getSupabaseConfig();
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return { ok: false, payload: { error: 'Sign in first' } };
+  const response = await fetch(`${url}/functions/v1/${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, apikey: anonKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  return { ok: response.ok, payload };
+}
+
+/** Connect the signed-in clinician's own Healthmail account (password → Vault). */
+export async function connectHealthmail(address: string, password: string) {
+  return authedPost('healthmail-connect', { address, password });
+}
+
+/** Send an approved repeat request (or prescription) to the pharmacy via Healthmail. */
+export async function sendViaHealthmail(ids: { prescriptionId?: string; repeatRequestId?: string }) {
+  return authedPost('send-healthmail', ids);
 }
 
 export async function fetchAppointments(): Promise<Appointment[]> {

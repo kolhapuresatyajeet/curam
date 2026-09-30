@@ -1,6 +1,9 @@
+import { useState } from 'react';
 import { Clock3, Send, ShieldCheck } from 'lucide-react';
 import { AppButton, Avatar, Badge, MetricCard, SectionTitle, TableShell } from '@/components/shared/ui';
 import { canApprovePrescriptions } from '@/lib/permissions';
+import { sendViaHealthmail } from '@/lib/db';
+import { supabaseConfigured } from '@/lib/supabase';
 import { formatIrishDate } from '@/lib/utils';
 import { appStore, useAppState, useSessionStaff } from '@/stores/appStore';
 import { patientName } from '@/types/domain';
@@ -8,6 +11,8 @@ import { patientName } from '@/types/domain';
 export default function PrescriptionsPage() {
   const state = useAppState();
   const staff = useSessionStaff();
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  const [sendError, setSendError] = useState('');
 
   return (
     <div className="fade-in">
@@ -53,9 +58,29 @@ export default function PrescriptionsPage() {
                       </AppButton>
                     )}
                     {row.status === 'approved' && (
-                      <AppButton size="sm" onClick={() => appStore.sendRepeatHealthmail(row.id)}>
-                        Send Healthmail
-                      </AppButton>
+                      <span className="flex flex-col items-start gap-1">
+                        <AppButton
+                          size="sm"
+                          disabled={sendingId === row.id}
+                          onClick={async () => {
+                            setSendError('');
+                            setSendingId(row.id);
+                            if (supabaseConfigured) {
+                              const result = await sendViaHealthmail({ repeatRequestId: row.id });
+                              if (!result.ok) {
+                                setSendError(String(result.payload.error ?? 'Send failed'));
+                                setSendingId(null);
+                                return;
+                              }
+                            }
+                            appStore.sendRepeatHealthmail(row.id);
+                            setSendingId(null);
+                          }}
+                        >
+                          {sendingId === row.id ? 'Sending…' : 'Send Healthmail'}
+                        </AppButton>
+                        {sendError && <span className="text-[10px] text-red-600">{sendError}</span>}
+                      </span>
                     )}
                     {row.status === 'pending' && staff && !canApprovePrescriptions(staff.role) && <span className="text-[10px] text-slate-400">GP only</span>}
                   </td>

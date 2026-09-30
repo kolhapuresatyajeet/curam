@@ -40,6 +40,7 @@ export interface StaffRow {
   google_email?: string | null;
   google_calendar_id?: string | null;
   google_calendar_summary?: string | null;
+  healthmail_address?: string | null;
 }
 
 export interface PatientRow {
@@ -90,6 +91,7 @@ export function staffFromRow(row: StaffRow): Staff {
     googleEmail: row.google_email ?? undefined,
     googleCalendarId: row.google_calendar_id ?? undefined,
     googleCalendarSummary: row.google_calendar_summary ?? undefined,
+    healthmailAddress: row.healthmail_address ?? undefined,
     invited: !row.user_id,
   };
 }

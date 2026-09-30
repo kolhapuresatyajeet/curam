@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AppButton, Badge, Field, SectionTitle, Tabs, inputClass } from '@/components/shared/ui';
 import { connectGoogleCalendar, disconnectGoogleCalendar } from '@/lib/google-calendar';
+import { connectHealthmail } from '@/lib/db';
 import { saveStripeKeyRemote } from '@/lib/stripe';
 import { refreshSchedule } from '@/lib/schedule';
 import { useSupabaseAuth } from '@/stores/authSession';
@@ -43,6 +44,14 @@ export default function SettingsPage() {
       )}
       {tab === 'Integrations' && (
         <div className="space-y-4">
+          <div className="surface max-w-lg space-y-3 rounded-xl p-4">
+            <div className="text-sm font-semibold">Healthmail — secure clinical email (optional)</div>
+            <p className="text-[12px] text-slate-600">
+              Connect your own @healthmail.ie account to send prescriptions to pharmacies directly from Cúram. Your password is stored
+              encrypted in the Supabase Vault and is never visible to other staff.
+            </p>
+            <HealthmailForm />
+          </div>
           <div className="surface max-w-lg space-y-3 rounded-xl p-4">
             <div className="text-sm font-semibold">Stripe — online payments (optional)</div>
             <p className="text-[12px] text-slate-600">
@@ -173,6 +182,55 @@ export default function SettingsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function HealthmailForm() {
+  const auth = useSupabaseAuth();
+  const [address, setAddress] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+  const connected = Boolean(auth.staff?.healthmailAddress);
+
+  if (connected) {
+    return <p className="text-xs text-teal-700">Connected as {auth.staff?.healthmailAddress}</p>;
+  }
+
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void (async () => {
+          setError('');
+          setBusy(true);
+          const result = await connectHealthmail(address, password);
+          setBusy(false);
+          if (result.ok) {
+            setSaved(true);
+            setPassword('');
+            setTimeout(() => setSaved(false), 3000);
+            window.location.reload();
+          } else {
+            setError(String(result.payload.error ?? 'Could not connect Healthmail'));
+          }
+        })();
+      }}
+    >
+      <Field label="Your @healthmail.ie address">
+        <input className={inputClass} type="email" required value={address} onChange={(e) => setAddress(e.target.value)} placeholder="firstname.surname@healthmail.ie" />
+      </Field>
+      <Field label="Healthmail password">
+        <input className={inputClass} type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+      </Field>
+      <AppButton type="submit" size="sm" variant="primary" disabled={busy}>
+        {busy ? 'Connecting…' : 'Connect Healthmail'}
+      </AppButton>
+      {saved && <p className="text-xs text-teal-700">Healthmail connected.</p>}
+      {error && <p className="text-xs text-red-600">{error}</p>}
+    </form>
   );
 }
 
