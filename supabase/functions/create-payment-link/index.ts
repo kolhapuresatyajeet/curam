@@ -1,8 +1,8 @@
 import { cors, json } from '../_shared/http.ts';
 
 // Creates a real Stripe Payment Link for an invoice in the practice's own
-// Stripe account (Stripe Connect; platform key fallback for demos) and stores
-// the URL on the invoice. Emails the patient.
+// Stripe account (Stripe Connect) and stores the URL on the invoice. Emails
+// the patient.
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -31,38 +31,18 @@ Deno.serve(async (req) => {
   if (!invoice || invoice.practice_id !== staff.practice_id) return json({ error: 'Invoice not found' }, 404);
   if (invoice.status === 'paid') return json({ error: 'Invoice is already paid' }, 409);
 
-  // Key resolution, most-to-least specific:
-  //  1. practice_billing_keys.stripe_secret_key — manually-pasted legacy key
-  //  2. platform STRIPE_SECRET_KEY + Stripe-Account header (Stripe Connect:
-  //     the practice's own connected account — money lands with the practice)
-  //  3. platform key alone (demo/test fallback account)
+  // Stripe Connect only: the practice must have connected their own Stripe
+  // account. The checkout session is created in their account via the
+  // Stripe-Account header — money goes straight to the practice.
   const platformKey = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
-  const { data: keys } = await admin
-    .from('practice_billing_keys')
-    .select('stripe_secret_key')
-    .eq('practice_id', staff.practice_id)
-    .maybeSingle();
   const { data: practice } = await admin
     .from('practices')
     .select('stripe_account_id')
     .eq('id', staff.practice_id)
     .maybeSingle();
-
-  let stripeKey: string | null = null;
-  let accountHeader: string | undefined;
-  let keySource: 'practice_key' | 'connect' | 'platform' = 'platform';
-  if (keys?.stripe_secret_key) {
-    stripeKey = keys.stripe_secret_key;
-    keySource = 'practice_key';
-  } else if (practice?.stripe_account_id && platformKey) {
-    stripeKey = platformKey;
-    accountHeader = practice.stripe_account_id;
-    keySource = 'connect';
-  } else if (platformKey) {
-    stripeKey = platformKey;
-  }
-  if (!stripeKey) {
-    return json({ error: 'Stripe is not connected. The practice can connect Stripe in Settings → Integrations.' }, 503);
+  if (!platformKey) return json({ error: 'Stripe is not configured on the platform' }, 503);
+  if (!practice?.stripe_account_id) {
+    return json({ error: 'The practice has not connected Stripe yet. Settings → Integrations → Connect with Stripe.' }, 503);
   }
 
   const unpaid = Math.round((Number(invoice.amount) - Number(invoice.paid_amount)) * 100);
@@ -84,9 +64,9 @@ Deno.serve(async (req) => {
   const response = await fetch('https://api.stripe.com/v1/payment_links', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${stripeKey}`,
+      Authorization: `Bearer ${platformKey}`,
       'Content-Type': 'application/x-www-form-urlencoded',
-      ...(accountHeader ? { 'Stripe-Account': accountHeader } : {}),
+      'Stripe-Account': practice.stripe_account_id,
     },
     body: form,
   });
@@ -119,5 +99,5 @@ Deno.serve(async (req) => {
     }
   }
 
-  return json({ url: link.url, emailed, keySource });
+  return json({ url: link.url, emailed, connectedAccount: practice.stripe_account_id });
 });

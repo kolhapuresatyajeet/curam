@@ -62,26 +62,14 @@ Deno.serve(async (req) => {
   const payload = await req.text();
   const signatureHeader = req.headers.get('stripe-signature') ?? '';
 
-  // Signing secrets, in order: the platform account, then each practice's own
-  // vaulted whsec_ (per-clinic Stripe accounts have their own webhook endpoints).
-  const candidates: string[] = [];
-  const envSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
-  if (envSecret) candidates.push(envSecret);
-  {
-    const { data: keys } = await admin
-      .from('practice_billing_keys')
-      .select('stripe_webhook_secret')
-      .not('stripe_webhook_secret', 'is', null);
-    for (const row of keys ?? []) {
-      if (row.stripe_webhook_secret) candidates.push(row.stripe_webhook_secret);
-    }
-  }
+  // One signing secret: the platform webhook endpoint. Connected-account
+  // events (Stripe Connect) are signed with the same endpoint secret when
+  // "connected account events" is enabled in the dashboard.
+  const secret = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
 
   let valid = false;
-  if (candidates.length > 0) {
-    for (const secret of candidates) {
-      if (await verifyStripeSignature(payload, signatureHeader, secret)) { valid = true; break; }
-    }
+  if (secret) {
+    valid = await verifyStripeSignature(payload, signatureHeader, secret);
     if (!valid) return json({ error: 'Invalid signature' }, 400);
   }
 
