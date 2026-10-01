@@ -44,7 +44,7 @@ export function Header({
   const greeting = active === 'dashboard' && staff ? `Good morning, ${first}` : pageLabels[active];
 
   return (
-    <header className="flex min-h-[76px] items-center gap-3 border-b border-slate-200/80 bg-[#fbfaf7]/90 px-4 backdrop-blur md:px-8">
+    <header className="sticky top-0 z-40 flex min-h-[76px] items-center gap-3 border-b border-slate-200/80 bg-[#fbfaf7]/90 px-4 backdrop-blur md:px-8">
       <button data-testid="button-open-navigation" aria-label="Open navigation" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 md:hidden" onClick={onOpenNav}>
         <Menu size={20} />
       </button>
@@ -80,7 +80,7 @@ export function Header({
             <ChevronDown size={14} className="text-slate-400" />
           </button>
           {roleOpen && (
-            <div className="absolute right-0 top-12 z-30 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
+            <div className="absolute right-0 top-12 z-50 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl">
               <div className="px-2.5 pb-1.5 pt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Switch workspace view</div>
               {team.map((item) => (
                 <button
