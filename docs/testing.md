@@ -131,6 +131,12 @@ three days, no fever") → stop → **Expect**: SOAP draft appears; check
 same call). Monthly cap (`AI_MONTHLY_CAP_CENTS`, default 500) blocks with a
 clear error when exceeded.
 
+Gateway-only connectivity check (models list, chat, /v1/messages, audio):
+
+```bash
+LITELLM_BASE_URL=https://… LITELLM_API_KEY=sk-… ./scripts/test-litellm.sh
+```
+
 ### 2.2 SMS — needs Twilio account + number
 
 ```bash

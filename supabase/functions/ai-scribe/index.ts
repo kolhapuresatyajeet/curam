@@ -22,7 +22,8 @@ const OUTPUT_MILLICENTS_PER_MTOK = Number(Deno.env.get('AI_OUTPUT_MILLICENTS_PER
 // calls are routed through the LiteLLM proxy (one key, per-practice virtual
 // keys, routing/fallbacks, spend tracking). Direct OpenAI/Anthropic keys
 // remain the fallback. Example: https://litellm.yourdomain.eu
-const LITELLM_BASE = Deno.env.get('LITELLM_BASE_URL')?.replace(/\/+$/, '') ?? '';
+// (A trailing /v1 in the configured URL is tolerated and stripped.)
+const LITELLM_BASE = (Deno.env.get('LITELLM_BASE_URL') ?? '').replace(/\/+$/, '').replace(/\/v1$/, '');
 const LITELLM_KEY = Deno.env.get('LITELLM_API_KEY') ?? '';
 
 function gatewayAuthHeaders(): Record<string, string> {
