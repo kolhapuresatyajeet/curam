@@ -123,6 +123,20 @@ function ReviewFormModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
+  // Escape closes; background scroll locked while the review is open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
   const submit = async () => {
     setBusy(true);
     setError('');
@@ -418,6 +432,7 @@ export default function CdmPage() {
                 <AppButton
                   size="sm"
                   onClick={() => {
+                    if (!window.confirm('Withdraw this patient from the CDM programme? Their staged reviews will stop and PCRS claims will cease.')) return;
                     void withdrawCdmEnrolment(item.id).then((result) => {
                       if (result.ok) appStore.upsertCdmEnrolments([{ ...item, status: 'withdrawn' }]);
                       else setEnrolError(result.error ?? 'Withdraw failed');

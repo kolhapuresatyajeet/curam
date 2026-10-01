@@ -102,7 +102,10 @@ export default function WorkflowsPage() {
             </AppButton>
           </div>
         ))}
-        {!definitions.length && !loaded && <div className="px-4 py-3 text-xs text-slate-400">Loading workflows…</div>}
+        {!definitions.length && !loaded && !supabaseConfigured && (
+          <div className="px-4 py-3 text-xs text-slate-400">Connect Supabase to load automations from the database.</div>
+        )}
+        {!definitions.length && !loaded && supabaseConfigured && <div className="px-4 py-3 text-xs text-slate-400">Loading workflows…</div>}
         {!definitions.length && loaded && <div className="px-4 py-3 text-xs text-slate-400">No workflows configured.</div>}
       </div>
 

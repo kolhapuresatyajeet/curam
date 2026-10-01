@@ -65,7 +65,7 @@ export function Header({
           className="h-9 w-full rounded-lg border border-slate-200 bg-white/70 pl-9 pr-3 text-xs outline-none transition focus:border-teal-400 focus:ring-2 focus:ring-teal-100"
         />
       </div>
-      <button data-testid="button-notifications" className="relative rounded-lg p-2 text-slate-500 transition hover:bg-slate-100">
+      <button data-testid="button-notifications" aria-label="Notifications" className="relative rounded-lg p-2 text-slate-500 transition hover:bg-slate-100">
         <Bell size={18} strokeWidth={1.8} />
         <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-red-500" />
       </button>

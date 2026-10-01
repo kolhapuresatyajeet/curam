@@ -1,23 +1,18 @@
-import { Card, CardContent } from '@/components/ui/card';
-import { AlertCircle } from 'lucide-react';
+import { AppButton } from '@/components/shared/ui';
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md mx-4">
-        <CardContent className="pt-6">
-          <div className="flex mb-4 gap-2">
-            <AlertCircle className="h-8 w-8 text-red-500" />
-            <h1 className="text-2xl font-bold text-gray-900">
-              404 Page Not Found
-            </h1>
-          </div>
-
-          <p className="mt-4 text-sm text-gray-600">
-            Did you forget to add the page to the router?
-          </p>
-        </CardContent>
-      </Card>
+    <div className="fade-in flex min-h-[60vh] flex-col items-center justify-center text-center">
+      <div className="font-mono text-[42px] font-bold tracking-[-.04em] text-teal-700">404</div>
+      <h1 className="mt-1 text-[19px] font-semibold tracking-[-.02em] text-slate-800">Page not found</h1>
+      <p className="mt-2 max-w-[300px] text-xs leading-5 text-slate-500">
+        This page doesn't exist in Cúram. Use the navigation to return to your practice diary.
+      </p>
+      <div className="mt-4">
+        <AppButton variant="primary" size="sm" onClick={() => (window.location.href = '/')}>
+          Back to dashboard
+        </AppButton>
+      </div>
     </div>
   );
 }

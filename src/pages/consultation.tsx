@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useLocation, useParams } from 'wouter';
-import { AppButton, Field, SectionTitle, inputClass } from '@/components/shared/ui';
+import { AppButton, EmptyState, Field, SectionTitle, inputClass } from '@/components/shared/ui';
 import { draftSoapFromTranscript, structureSoapRemote, suggestIcpc2 } from '@/lib/ai-scribe';
 import { id, nowIso } from '@/lib/utils';
 import { consultationStore, useConsultationStore } from '@/stores/consultationStore';
@@ -49,7 +49,28 @@ export default function ConsultationPage() {
     createdAt: nowIso(),
   });
 
-  if (!patient || !staff) return null;
+  if (!patient) {
+    return (
+      <div className="fade-in">
+        <SectionTitle title="Consultation" />
+        <EmptyState
+          title="No patient selected"
+          detail="Open a patient from the Patients list to start or continue a consultation."
+        />
+      </div>
+    );
+  }
+  if (!staff) {
+    return (
+      <div className="fade-in">
+        <SectionTitle title="Consultation" />
+        <EmptyState
+          title="Sign in required"
+          detail="Your staff record could not be matched, so notes cannot be signed. Contact the practice manager."
+        />
+      </div>
+    );
+  }
 
   function patch(partial: Partial<Consultation>) {
     setNote((current) => ({ ...current, ...partial }));
@@ -85,7 +106,9 @@ export default function ConsultationPage() {
             <AppButton
               size="sm"
               variant="primary"
+              testId="button-sign-note"
               onClick={() => {
+                if (!window.confirm('Sign this consultation note? A signed note is added to the patient record and can no longer be edited.')) return;
                 const signed = { ...note, status: 'signed' as const, signedAt: nowIso(), staffId: staff.id };
                 appStore.saveConsultation(signed);
                 setLocation(`/patients/${patient.id}`);

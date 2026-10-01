@@ -1,4 +1,4 @@
-import { AppButton, Badge, SectionTitle, Tabs } from '@/components/shared/ui';
+import { AppButton, Badge, EmptyState, SectionTitle, Tabs } from '@/components/shared/ui';
 import { appStore, useAppState } from '@/stores/appStore';
 import { patientName } from '@/types/domain';
 import { useState } from 'react';
@@ -26,13 +26,27 @@ export default function ReferralsPage() {
                 <p className="text-[11px] text-slate-500">{item.hospital} · {item.notes}</p>
               </div>
               {item.status === 'draft' && (
-                <AppButton size="sm" variant="primary" onClick={() => appStore.updateReferralStatus(item.id, 'sent')}>
+                <AppButton
+                  size="sm"
+                  variant="primary"
+                  testId={`button-send-referral-${item.id}`}
+                  onClick={() => {
+                    if (!window.confirm(`Approve and send this ${item.specialty} referral to ${item.hospital} via HealthLink? This cannot be undone.`)) return;
+                    appStore.updateReferralStatus(item.id, 'sent');
+                  }}
+                >
                   Approve & send
                 </AppButton>
               )}
             </div>
           );
         })}
+        {rows.length === 0 && (
+          <EmptyState
+            title={tab === 'Drafts' ? 'No drafts waiting' : 'No active referrals'}
+            detail={tab === 'Drafts' ? 'Síle-drafted or manually created referral letters appear here for GP approval.' : 'Sent referrals and their HealthLink acknowledgements are listed here.'}
+          />
+        )}
       </div>
     </div>
   );

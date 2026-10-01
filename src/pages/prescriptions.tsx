@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Clock3, Send, ShieldCheck } from 'lucide-react';
-import { AppButton, Avatar, Badge, MetricCard, SectionTitle, TableShell } from '@/components/shared/ui';
+import { AppButton, Avatar, Badge, EmptyState, MetricCard, SectionTitle, TableShell } from '@/components/shared/ui';
 import { canApprovePrescriptions } from '@/lib/permissions';
 import { sendViaHealthmail } from '@/lib/db';
 import { supabaseConfigured } from '@/lib/supabase';
@@ -12,7 +12,7 @@ export default function PrescriptionsPage() {
   const state = useAppState();
   const staff = useSessionStaff();
   const [sendingId, setSendingId] = useState<string | null>(null);
-  const [sendError, setSendError] = useState('');
+  const [sendError, setSendError] = useState<{ id: string; message: string } | null>(null);
 
   return (
     <div className="fade-in">
@@ -53,7 +53,15 @@ export default function PrescriptionsPage() {
                   </td>
                   <td>
                     {row.status === 'pending' && staff && canApprovePrescriptions(staff.role) && (
-                      <AppButton size="sm" variant="primary" onClick={() => appStore.approveRepeat(row.id, staff.id)}>
+                      <AppButton
+                        size="sm"
+                        variant="primary"
+                        testId={`button-approve-rx-${row.id}`}
+                        onClick={() => {
+                          if (!window.confirm(`Approve ${row.medicine} for ${patient ? patientName(patient) : 'this patient'}? A GP sign-off is recorded.`)) return;
+                          appStore.approveRepeat(row.id, staff.id);
+                        }}
+                      >
                         Approve
                       </AppButton>
                     )}
@@ -63,12 +71,13 @@ export default function PrescriptionsPage() {
                           size="sm"
                           disabled={sendingId === row.id}
                           onClick={async () => {
-                            setSendError('');
+                            if (!window.confirm('Send this prescription to the patient via Healthmail? This cannot be undone.')) return;
+                            setSendError(null);
                             setSendingId(row.id);
                             if (supabaseConfigured) {
                               const result = await sendViaHealthmail({ repeatRequestId: row.id });
                               if (!result.ok) {
-                                setSendError(String(result.payload.error ?? 'Send failed'));
+                                setSendError({ id: row.id, message: String(result.payload.error ?? 'Send failed') });
                                 setSendingId(null);
                                 return;
                               }
@@ -79,7 +88,7 @@ export default function PrescriptionsPage() {
                         >
                           {sendingId === row.id ? 'Sending…' : 'Send Healthmail'}
                         </AppButton>
-                        {sendError && <span className="text-[10px] text-red-600">{sendError}</span>}
+                        {sendError?.id === row.id && <span className="text-[10px] text-red-600">{sendError.message}</span>}
                       </span>
                     )}
                     {row.status === 'pending' && staff && !canApprovePrescriptions(staff.role) && <span className="text-[10px] text-slate-400">GP only</span>}
@@ -89,6 +98,9 @@ export default function PrescriptionsPage() {
             })}
           </tbody>
         </TableShell>
+        {state.repeatRequests.length === 0 && (
+          <EmptyState title="No repeat requests" detail="Patient requests arrive here for GP approval — nothing is ever auto-approved." />
+        )}
       </div>
     </div>
   );

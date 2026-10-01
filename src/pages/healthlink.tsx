@@ -14,7 +14,8 @@ export default function HealthLinkPage() {
     const patient = state.patients.find((p) => p.id === row.patientId);
     const hay = `${patient ? patientName(patient) : ''} ${row.preview}`.toLowerCase();
     if (search && !hay.includes(search.toLowerCase())) return false;
-    if (tab === 'Labs' && row.abnormalFlags) return true;
+    if (tab === 'Abnormal') return row.abnormalFlags.length > 0;
+    if (tab === 'Awaiting review') return !row.gpReviewed;
     return true;
   });
 
@@ -26,8 +27,8 @@ export default function HealthLinkPage() {
         description="Lab results, discharges and referral acks parsed from HL7 and filed to the patient record."
         action={<AppButton size="sm" icon={RefreshCw} onClick={() => window.location.reload()}>Sync now</AppButton>}
       />
-      <Tabs items={['All', 'Labs']} value={tab} onChange={setTab} />
-      <input className="mb-3 h-9 max-w-sm rounded-lg border px-3 text-xs" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search" />
+    <Tabs items={['All', 'Abnormal', 'Awaiting review']} value={tab} onChange={setTab} />
+    <input className="mb-3 h-9 max-w-sm rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search patient or result…" />
       <TableShell>
         <thead>
           <tr>
