@@ -83,7 +83,8 @@ Deno.serve(async (req) => {
   if (!patient || patient.practice_id !== caller.practice_id) return json({ error: 'Patient not found' }, 404);
 
   const pharmacy = String(patient.pharmacy_healthmail ?? '').trim().toLowerCase();
-  if (!pharmacy.endsWith('@healthmail.ie')) {
+  const { isHealthmailAddress } = await import('../_shared/healthmail.ts');
+  if (!isHealthmailAddress(pharmacy)) {
     return json({ error: 'Patient has no nominated pharmacy Healthmail address. Add one to the patient record first.' }, 400);
   }
 
@@ -95,14 +96,12 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (!prescriber?.healthmail_address) return json({ error: 'The prescriber has not connected Healthmail in Settings' }, 503);
 
-  const { data: ref } = await admin.from('staff_vault_refs').select('healthmail_secret_id').eq('staff_id', prescriber.id).maybeSingle();
-  if (!ref?.healthmail_secret_id) return json({ error: 'Prescriber Healthmail password missing from the vault' }, 503);
-  const { data: secretRow } = await admin
-    .from('vault.decrypted_secrets')
-    .select('decrypted_secret')
-    .eq('id', ref.healthmail_secret_id)
+  const { data: cred } = await admin
+    .from('staff_healthmail_credentials')
+    .select('password')
+    .eq('staff_id', prescriber.id)
     .maybeSingle();
-  if (!secretRow?.decrypted_secret) return json({ error: 'Could not read Healthmail credentials' }, 500);
+  if (!cred?.password) return json({ error: 'Prescriber Healthmail password missing — reconnect in Settings' }, 503);
 
   // Compose the prescription.
   const dob = patient.dob ? new Date(patient.dob).toLocaleDateString('en-IE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
@@ -127,7 +126,7 @@ Deno.serve(async (req) => {
     port: 587,
     secure: false,
     requireTLS: true,
-    auth: { user: prescriber.healthmail_address, pass: secretRow.decrypted_secret },
+    auth: { user: prescriber.healthmail_address, pass: cred.password },
   });
   try {
     await transporter.sendMail({

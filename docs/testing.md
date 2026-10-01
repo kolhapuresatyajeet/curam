@@ -353,52 +353,61 @@ supabase secrets set RESEND_FROM="Cúram <onboarding@resend.dev>"
 
 Test the whole book → confirmation → reminder loop sending to yourself.
 
-### 7.2 Automated email test suite (repeatable — no accounts needed)
+### 7.2 Automated email test suite (repeatable — no accounts, no cloud changes)
 
 ```bash
-npm run test:email               # SMTP round-trips against Ethereal
-CURAM_LIVE_SMOKE=1 npm run test:email   # + deployed function auth checks
+npm run test:email                        # SMTP round-trips (no Supabase at all)
+CURAM_LIVE_SMOKE=1 npm run test:email     # + deployed functions auth smoke
+CURAM_FULL_LOOP=1 npm run test:email      # + full connect→send loop (local stack)
 ```
 
-`tests/email/email.test.mjs` (node:test) auto-generates a fresh free Ethereal
-account every run — nothing to sign up for, nothing delivered to real
-recipients, and every captured message is asserted via its preview URL:
+`tests/email/` (node:test) auto-generates a fresh free Ethereal account every
+run — nothing to sign up for, nothing delivered to real recipients, every
+captured message asserted via its preview URL:
 
-- Ethereal account auto-creation (free provider reachable)
 - **Prescription email round-trip** — mirrors the `send-healthmail` transporter
-  config + prescription template verbatim (drug/dose/patient/prescriber/
-  S.I. 94 of 2020 footer all asserted)
+  config + template verbatim (drug/dose/patient/prescriber/S.I. 94 of 2020
+  footer all asserted)
 - **Booking confirmation** — mirrors `booking-mail.ts` texts, asserts Dublin
-  timezone rendering (`Europe/Dublin`) and booked/cancelled verb consistency
-- **Live smoke** (opt-in via `CURAM_LIVE_SMOKE=1`) — the deployed
-  `healthmail-connect` / `send-booking-email` / `send-healthmail` functions
-  must be up and reject unauthenticated calls (401/403)
+  timezone rendering and booked/cancelled verb consistency
+- **Live smoke** (opt-in) — deployed `healthmail-connect` /
+  `send-booking-email` / `send-healthmail` must be up and reject
+  unauthenticated calls (401/403)
+- **Full loop** (opt-in, local stack only) — starts `supabase functions serve`
+  against a running **local** Supabase stack (`supabase start`), creates a test
+  practice/GP/patient/prescription in the local DB, connects an Ethereal
+  address via the real `healthmail-connect`, sends via the real
+  `send-healthmail`, asserts the DB side-effects, then deletes all rows
 
-If you change the templates or transport config in those functions, update the
-mirrors in the test file so the suite keeps guarding real behaviour.
+Test-only relaxation: `HEALTHMAIL_TEST_MODE=true` lives ONLY in
+`tests/email/functions.test.env` (consumed by the local `functions serve`).
+It is never set in Supabase cloud secrets, so production always enforces
+`@healthmail.ie` strictly. If templates/transport change in the functions,
+update the mirrors in the tests so the suite keeps guarding real behaviour.
 
 ### 7.3 Healthmail flow (SMTP/IMAP) — captured test inbox
 
-Real `@healthmail.ie` accounts need GPIT accreditation, so test against a fake
-SMTP catcher. Recommended: **Ethereal** (ethereal.email — by the Nodemailer
-team, unlimited captures, web UI). Alternatives: Mailtrap (free sandbox, ~1k
-emails/month) or Mailpit (local Docker, unlimited, dev only).
+Real `@healthmail.ie` accounts need GPIT accreditation, so testing uses
+**Ethereal** (ethereal.email — by the Nodemailer team, unlimited captures, web
+UI). Alternatives: Mailtrap (free sandbox, ~1k emails/month) or Mailpit (local
+Docker, unlimited, dev only).
 
-The SMTP/IMAP hosts are already env-driven
-(`HEALTHMAIL_SMTP_HOST` / `HEALTHMAIL_IMAP_HOST`), so:
+Two ways to exercise it — both scoped to tests, no cloud secrets:
 
-1. Create a free account at ethereal.email (auto-generated credentials)
-2. Wire the test mode (needs a small code change: `healthmail-connect`
-   rejects non-`@healthmail.ie` addresses unless a `HEALTHMAIL_TEST_MODE`
-   flag relaxes it to accept `@ethereal.email`):
+1. **Automated** (preferred): `CURAM_FULL_LOOP=1 npm run test:email` (§7.2)
+   drives the real `healthmail-connect` + `send-healthmail` functions served
+   locally, with the test-only env file. Prerequisite: `supabase start`.
+2. **Manual**: serve locally yourself and connect from the app UI:
+   ```bash
+   supabase start   # local stack (separate from the cloud project)
+   supabase functions serve --env-file tests/email/functions.test.env
+   # app .env.local: VITE_SUPABASE_URL points at the local URL, then
+   # Settings → Connect Healthmail with the Ethereal address/password
+   ```
+   **Expect**: message captured in Ethereal's web inbox, never delivered to a
+   real pharmacy.
 
-```bash
-supabase secrets set HEALTHMAIL_TEST_MODE=true \
-  HEALTHMAIL_SMTP_HOST=smtp.ethereal.email \
-  HEALTHMAIL_IMAP_HOST=imap.ethereal.email \
-  HEALTHMAIL_TEST_USER=<ethereal-user> HEALTHMAIL_TEST_PASS=<ethereal-pass>
-```
-
-3. Settings → Connect Healthmail (Ethereal address) → send an approved
-   prescription → **Expect**: message captured in the Ethereal web inbox,
-   never delivered to a real pharmacy.
+Credentials are stored in `staff_healthmail_credentials` (RLS deny-all,
+service-role only — migration 027). This replaced the Vault, which is unusable
+on hosted Supabase (`vault_create_secret` is locked to `supabase_admin`).
+TODO before go-live: envelope-encrypt the password column with a KMS key.

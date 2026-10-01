@@ -27,18 +27,20 @@ Deno.serve(async (req) => {
   const body = await req.json();
   const address = String(body.address ?? '').trim().toLowerCase();
   const password = String(body.password ?? '');
-  if (!address.endsWith('@healthmail.ie')) {
+  const { isHealthmailAddress } = await import('../_shared/healthmail.ts');
+  if (!isHealthmailAddress(address)) {
     return json({ error: 'Enter your @healthmail.ie address' }, 400);
   }
   if (!password) return json({ error: 'Healthmail password required' }, 400);
 
-  const { data: secretId, error: vaultError } = await admin.rpc('vault_create_secret', {
-    p_name: `healthmail_${staff.id}`,
-    p_secret: password,
-  });
-  if (vaultError || !secretId) return json({ error: vaultError?.message ?? 'Could not store credentials' }, 500);
-
-  await admin.from('staff_vault_refs').upsert({ staff_id: staff.id, healthmail_secret_id: secretId, connected_at: new Date().toISOString() });
+  // Password is stored in a service-role-only table (RLS deny-all, no
+  // policies). The hosted Supabase Vault is not usable by functions
+  // (vault_create_secret is locked to supabase_admin), so a plain locked
+  // table is the practical store — TODO: envelope-encrypt before go-live.
+  await admin.from('staff_healthmail_credentials').upsert(
+    { staff_id: staff.id, password, connected_at: new Date().toISOString() },
+    { onConflict: 'staff_id' },
+  );
   await admin.from('staff').update({ healthmail_address: address }).eq('id', staff.id);
 
   return json({ ok: true, address });
