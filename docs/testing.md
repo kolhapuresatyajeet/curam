@@ -148,7 +148,11 @@ Test: book an appointment → **Expect**: SMS confirmation arrives; a cron tick
 (≤15 min) sends the 48h reminder. `sms_log` records both. Twilio trial accounts
 only text verified numbers — verify your own phone in the Twilio console.
 
-### 2.3 Stripe — needs test keys + webhook
+### 2.3 Stripe — Connect (per-practice) + webhook
+
+Stripe runs on the platform's test keys; each practice connects its **own**
+Stripe Express account from Settings → Stripe ("Connect Stripe"). No per-practice
+key entry anywhere.
 
 ```bash
 supabase secrets set STRIPE_SECRET_KEY=sk_test_... STRIPE_WEBHOOK_SECRET=whsec_...
@@ -156,9 +160,11 @@ supabase secrets set STRIPE_SECRET_KEY=sk_test_... STRIPE_WEBHOOK_SECRET=whsec_.
 stripe listen --forward-to https://duphvinfwkskjkfqaetr.supabase.co/functions/v1/stripe-webhook
 ```
 
-Test: Settings → save Stripe key → billing shows "Payment link" on unpaid
-private invoices → click, pay with Stripe test card `4242 4242 4242 4242` →
-**Expect**: webhook flips invoice to paid; billing shows the Stripe payment.
+Test: Settings → Connect Stripe → complete Express onboarding (test IBAN
+`IE89370400440532013000`) → return to `/settings?stripe=return` → **Expect**:
+status "connected", `practices.stripe_account_id` set. Billing → payment link
+on an unpaid private invoice → pay with test card `4242 4242 4242 4242` →
+**Expect**: webhook flips invoice to paid + `invoice.payment_recorded` audit row.
 
 ### 2.4 Healthmail — needs a real @healthmail.ie account
 
@@ -245,5 +251,130 @@ does the calls instead of curl.
   now, but before go-live: create a staging project, move test data there
 - Patients created for testing: mark clearly ("TEST-…") or delete (GDPR check
   applies in real use, not test data)
-- `settings.tsx` → "Reset demo data" only resets the local mock store, **not**
-  Supabase rows
+- "Reset demo data" only resets the local mock store (demo mode), **not**
+  Supabase rows; on the live app the store boots blank and hydrates from the DB
+
+---
+
+## 6. Fresh onboarding E2E — deployed app (curam-phi.vercel.app)
+
+Full smoke test from zero. Run in a **fresh incognito window** (or clear site
+data) so an old service worker / stale localStorage can't interfere. Ready
+before you start: two Google accounts (GP + invited staff), Stripe test card
+`4242 4242 4242 4242`, and the latest deploy live on Vercel.
+
+### Phase 1 — Onboarding
+
+1. Open `https://curam-phi.vercel.app/` → **Expect**: redirect to `/login`
+   (also proves the service-worker cache fix is live)
+2. "Create a practice" → `/setup` → Continue with Google (returns to `/setup`)
+3. Fill your name / practice name / address / Eircode / phone → Create practice
+   → runs `bootstrap_practice`, you become the first GP
+4. **Expect**: dashboard with **zero demo data** — no "Riverside Family
+   Practice", no fake patients/invoices, all metrics zero (seed can only
+   appear in demo mode without Supabase)
+
+### Phase 2 — Staff & roles
+
+1. Staff → invite a member (e.g. role Receptionist) with an exact Google email
+   → **Expect**: "Invite pending" badge
+2. Second incognito window: sign in with that account → slot claimed by email,
+   pending clears → **Expect**: role-driven sidebar (receptionist sees no
+   Prescriptions / CDM GP-review actions)
+
+### Phase 3 — Patients & consultation
+
+1. Patients → Register a test patient (name, DOB, `08X XXX XXXX` phone,
+   GMS/private)
+2. Open patient → Start consultation → dictate/type → AI structures SOAP +
+   ICPC-2 → Sign (confirm dialog) → **Expect**: note permanent afterwards
+3. Prescriptions → create repeat → GP Approve (confirm) → send to a
+   `@healthmail.ie` pharmacy (connect your Healthmail account in Settings
+   first — see §7 for testing without a real account)
+
+### Phase 4 — Calendar & booking
+
+1. Calendar → click an empty slot → booking modal prefilled (15-min rounding);
+   check Day (per-clinician columns) / Week / Month and the red now-line
+2. Settings → Google Calendar → Connect → **Expect**: appointment appears in
+   your Google Calendar
+3. Private window → public `/book` → book → **Expect**: appears on the
+   calendar; confirmation email per §7 (blocked until the Resend domain is
+   verified)
+4. Waiting room → check the patient in
+
+### Phase 5 — Billing (Stripe Connect)
+
+1. Settings → Connect Stripe → Express onboarding with test data (IBAN
+   `IE89370400440532013000`) → **Expect**: back at `/settings?stripe=return`,
+   status connected
+2. Billing → create private invoice → payment link → pay `4242 4242 4242 4242`
+   → **Expect**: invoice paid via webhook + `invoice.payment_recorded` row in
+   `audit_log`
+3. GMS appointments → **Expect**: no invoice (PCRS-claimed)
+
+### Phase 6 — Clinical programmes
+
+1. CDM → enrol a GMS patient with a chronic condition → nurse review → GP
+   review → **Expect**: both signatures required to complete
+2. Referrals → create → Approve & send (confirm)
+3. HealthLink → Labs tab filters (All / Abnormal / Awaiting review) →
+   **Expect**: abnormal results only offer GP callback, never AI delivery
+
+### Phase 7 — Síle AI & compliance
+
+1. Síle → test call → **Expect**: transcript + recording logged
+2. Say "chest pain" → **Expect**: instructed to call 999/112
+3. Supabase `audit_log` → entries for login, note signed, Rx approved, payment
+   recorded, etc.
+4. Settings → Export workspace (JSON) → GDPR export downloads
+5. Sign out → protected routes redirect to `/login`
+
+### Known external blockers (skip, don't fail)
+
+| Flow | Blocked on |
+|---|---|
+| Booking/reminder emails | `mail.voicehub.uk` DNS verification at resend.com/domains |
+| WhatsApp reminders | Approved Twilio Content Templates (+ number has no SMS capability) |
+
+---
+
+## 7. Email testing without real accounts (free)
+
+### 7.1 Booking/confirmation emails (Resend) — works today
+
+Resend free tier: 3,000 emails/month (100/day). Until `mail.voicehub.uk` is
+verified, switch the sender to Resend's shared test address, which delivers
+only to the Resend account owner's own email:
+
+```bash
+supabase secrets set RESEND_FROM="Cúram <onboarding@resend.dev>"
+```
+
+Test the whole book → confirmation → reminder loop sending to yourself.
+
+### 7.2 Healthmail flow (SMTP/IMAP) — captured test inbox
+
+Real `@healthmail.ie` accounts need GPIT accreditation, so test against a fake
+SMTP catcher. Recommended: **Ethereal** (ethereal.email — by the Nodemailer
+team, unlimited captures, web UI). Alternatives: Mailtrap (free sandbox, ~1k
+emails/month) or Mailpit (local Docker, unlimited, dev only).
+
+The SMTP/IMAP hosts are already env-driven
+(`HEALTHMAIL_SMTP_HOST` / `HEALTHMAIL_IMAP_HOST`), so:
+
+1. Create a free account at ethereal.email (auto-generated credentials)
+2. Wire the test mode (needs a small code change: `healthmail-connect`
+   rejects non-`@healthmail.ie` addresses unless a `HEALTHMAIL_TEST_MODE`
+   flag relaxes it to accept `@ethereal.email`):
+
+```bash
+supabase secrets set HEALTHMAIL_TEST_MODE=true \
+  HEALTHMAIL_SMTP_HOST=smtp.ethereal.email \
+  HEALTHMAIL_IMAP_HOST=imap.ethereal.email \
+  HEALTHMAIL_TEST_USER=<ethereal-user> HEALTHMAIL_TEST_PASS=<ethereal-pass>
+```
+
+3. Settings → Connect Healthmail (Ethereal address) → send an approved
+   prescription → **Expect**: message captured in the Ethereal web inbox,
+   never delivered to a real pharmacy.
