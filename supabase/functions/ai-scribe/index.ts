@@ -18,9 +18,28 @@ const TRANSCRIBE_MILLICENTS_PER_SEC = Number(Deno.env.get('AI_TRANSCRIBE_MILLICE
 const INPUT_MILLICENTS_PER_MTOK = Number(Deno.env.get('AI_INPUT_MILLICENTS_PER_MTOK') ?? '100'); // $1/MTok
 const OUTPUT_MILLICENTS_PER_MTOK = Number(Deno.env.get('AI_OUTPUT_MILLICENTS_PER_MTOK') ?? '500'); // $5/MTok
 
+// LiteLLM gateway (optional). When LITELLM_BASE_URL is set, both provider
+// calls are routed through the LiteLLM proxy (one key, per-practice virtual
+// keys, routing/fallbacks, spend tracking). Direct OpenAI/Anthropic keys
+// remain the fallback. Example: https://litellm.yourdomain.eu
+const LITELLM_BASE = Deno.env.get('LITELLM_BASE_URL')?.replace(/\/+$/, '') ?? '';
+const LITELLM_KEY = Deno.env.get('LITELLM_API_KEY') ?? '';
+
+function gatewayAuthHeaders(): Record<string, string> {
+  // LiteLLM accepts Bearer; sending x-api-key too keeps the same headers
+  // working against direct Anthropic endpoints if the base URL is swapped.
+  const key = LITELLM_KEY || Deno.env.get('ANTHROPIC_API_KEY') || '';
+  return { Authorization: `Bearer ${key}`, 'x-api-key': key };
+}
+
 async function transcribeAudio(audio: ArrayBuffer, filename: string): Promise<{ transcript?: string; error?: string }> {
-  const key = Deno.env.get('OPENAI_API_KEY') ?? '';
-  if (!key) return { error: 'Transcription is not configured (OPENAI_API_KEY missing)' };
+  const key = LITELLM_KEY || Deno.env.get('OPENAI_API_KEY') || '';
+  if (!key) {
+    return { error: 'Transcription is not configured (set LITELLM_API_KEY + LITELLM_BASE_URL, or OPENAI_API_KEY)' };
+  }
+  const endpoint = LITELLM_BASE
+    ? `${LITELLM_BASE}/v1/audio/transcriptions`
+    : 'https://api.openai.com/v1/audio/transcriptions';
 
   const form = new FormData();
   form.append('file', new Blob([audio]), filename);
@@ -28,7 +47,7 @@ async function transcribeAudio(audio: ArrayBuffer, filename: string): Promise<{ 
   form.append('language', 'en');
   form.append('prompt', 'Irish general practice consultation. Medical terms, drug names and ICPC-2 coding context.');
 
-  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}` },
     body: form,
@@ -51,19 +70,26 @@ function patientContextBlock(patient: any, conditions: any[], medications: strin
 }
 
 async function structureSoap(transcript: string, context: string): Promise<{ draft?: any; codes?: string[]; inputTokens?: number; outputTokens?: number; error?: string }> {
-  const key = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
-  if (!key) return { error: 'Note structuring is not configured (ANTHROPIC_API_KEY missing)' };
+  if (!LITELLM_BASE && !Deno.env.get('ANTHROPIC_API_KEY')) {
+    return { error: 'Note structuring is not configured (set LITELLM_BASE_URL + LITELLM_API_KEY, or ANTHROPIC_API_KEY)' };
+  }
 
   const system = `You are a medical scribe for an Irish GP. Convert the consultation transcript into a structured SOAP note.
 Use only what is in the transcript and context. Never invent findings. Write in concise clinical English (Irish conventions: 999/112 for emergencies, dd/MM/yyyy dates).
 Also suggest 0-3 ICPC-2 codes (format "CODE Label") that match the assessment.
 Respond with JSON only: {"subjective": string, "objective": string, "assessment": string, "plan": string, "icpc2": string[]}`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  // Anthropic /v1/messages format — natively proxied by LiteLLM (same body,
+  // cache_control included), and the direct API when no gateway is configured.
+  const endpoint = LITELLM_BASE
+    ? `${LITELLM_BASE}/v1/messages`
+    : 'https://api.anthropic.com/v1/messages';
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
+      ...gatewayAuthHeaders(),
+      ...(LITELLM_BASE ? {} : { 'anthropic-version': '2023-06-01' }),
       'content-type': 'application/json',
     },
     body: JSON.stringify({

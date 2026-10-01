@@ -105,7 +105,21 @@ cd patient-app && tsc -p tsconfig.json --noEmit     # patient app
 
 ## 2. Needs external accounts (enable one at a time)
 
-### 2.1 AI Scribe — needs `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
+### 2.1 AI Scribe — via LiteLLM (recommended) or direct keys
+
+LiteLLM gateway (one key, model routing/fallbacks, spend tracking). Host it in
+the EU (self-hosted Docker, or EU-hosted proxy) to keep data residency:
+
+```bash
+supabase secrets set LITELLM_BASE_URL=https://litellm.yourdomain.eu \
+  LITELLM_API_KEY=sk-litellm-...
+# Optional overrides (use your LiteLLM model names — provider prefixes depend
+# on your LiteLLM router config, e.g. anthropic/claude-haiku-4-5):
+# supabase secrets set AI_TRANSCRIBE_MODEL=openai/gpt-4o-mini-transcribe \
+#   AI_STRUCTURE_MODEL=anthropic/claude-haiku-4-5
+```
+
+Or direct provider keys (fallback path, no gateway):
 
 ```bash
 supabase secrets set OPENAI_API_KEY=sk-... ANTHROPIC_API_KEY=sk-ant-...
@@ -113,8 +127,9 @@ supabase secrets set OPENAI_API_KEY=sk-... ANTHROPIC_API_KEY=sk-ant-...
 
 Test: start a consultation → record a sentence ("patient has a sore throat for
 three days, no fever") → stop → **Expect**: SOAP draft appears; check
-`ai_usage_log` has a metered row. Monthly cap (`AI_MONTHLY_CAP_CENTS`, default
-500) blocks with a clear error when exceeded.
+`ai_usage_log` has a metered row (and LiteLLM's own spend dashboard shows the
+same call). Monthly cap (`AI_MONTHLY_CAP_CENTS`, default 500) blocks with a
+clear error when exceeded.
 
 ### 2.2 SMS — needs Twilio account + number
 

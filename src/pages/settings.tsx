@@ -202,7 +202,7 @@ export default function SettingsPage() {
               <li><strong>Vercel (EU)</strong> — frontend hosting for the staff web app.</li>
               <li><strong>Twilio</strong> — SMS appointment reminders (phone number only).</li>
               <li><strong>Stripe</strong> — payment links and card payments (billing contact details).</li>
-              <li><strong>OpenAI / Anthropic</strong> — AI scribe transcription and note structuring. Audio and transcripts are processed for this purpose only and are never used for model training.</li>
+              <li><strong>OpenAI / Anthropic (routed via the LiteLLM gateway when configured)</strong> — AI scribe transcription and note structuring. Audio and transcripts are processed for this purpose only and are never used for model training. The LiteLLM gateway must be EU-hosted to preserve data residency.</li>
               <li><strong>Google</strong> — optional clinician calendar sync (appointment times, no clinical data).</li>
               <li><strong>Healthlink / Healthmail (HSE)</strong> — clinical message transport under HSE governance.</li>
             </ul>

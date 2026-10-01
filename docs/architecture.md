@@ -18,7 +18,7 @@
 
 | Function | Trigger | Auth |
 |---|---|---|
-| `ai-scribe` | Staff web (consultation) | Staff JWT; OpenAI transcription + Claude structuring, metered via `ai_usage_log` |
+| `ai-scribe` | Staff web (consultation) | Staff JWT; transcription + Claude structuring routed via LiteLLM gateway (or direct keys), metered via `ai_usage_log` |
 | `book-appointment` | Síle / web | Service/JWT; writes appointment + SMS confirmation + calendar push |
 | `appointment-availability` | Síle / web | JWT; free slot lookup |
 | `voice-appointments` | Vapi voice call | Vapi; books on behalf of the caller |
@@ -42,6 +42,10 @@
 ## 2. Component diagram
 
 <img src="diagrams/flow-1-components-ba53b469.svg" alt="diagram 1" width="100%" />
+
+<details><summary>Mermaid source</summary>
+
+<img src="diagrams/flow-1-components-b090916e.svg" alt="diagram 1" width="100%" />
 
 <details><summary>Mermaid source</summary>
 
@@ -74,7 +78,7 @@ flowchart TB
     subgraph External
         TW["Twilio (SMS)"]
         ST["Stripe (payments)"]
-        OA["OpenAI (transcribe)"]
+        OA["AI providers via LiteLLM<br/>(transcribe + Claude)"]
         AN["Anthropic (Claude)"]
         GOOGLE["Google Calendar"]
         HEALTHLINK["HealthLink (HSE)<br/>HL7 v2.4 over mTLS"]
@@ -102,10 +106,15 @@ flowchart TB
     VAPI --> BOOK
 ```
 </details>
+</details>
 
 ## 3. Happy flows
 
 ### 3.1 Booking + reminders (staff, Síle or patient app)
+
+<img src="diagrams/flow-2-c-43c4634f.svg" alt="diagram 2" width="100%" />
+
+<details><summary>Mermaid source</summary>
 
 <img src="diagrams/flow-2-c-43c4634f.svg" alt="diagram 2" width="100%" />
 
@@ -129,6 +138,7 @@ sequenceDiagram
     CR->>DB: mark reminder_sent
 ```
 </details>
+</details>
 
 ### 3.2 Consultation with AI Scribe
 
@@ -136,26 +146,34 @@ sequenceDiagram
 
 <details><summary>Mermaid source</summary>
 
+<img src="diagrams/flow-3-gp-f137d676.svg" alt="diagram 3" width="100%" />
+
+<details><summary>Mermaid source</summary>
+
 ```mermaid
 sequenceDiagram
     participant GP as Staff web (consultation)
     participant S as ai-scribe
-    participant OA as OpenAI
-    participant AN as Anthropic
+    participant L as LiteLLM gateway
     participant DB as Postgres
 
     GP->>GP: record audio (MediaRecorder, offline draft kept locally)
     GP->>S: audio upload (staff JWT)
-    S->>OA: transcribe (gpt-4o-mini-transcribe)
-    S->>AN: structure SOAP (cached prompt)
+    S->>L: transcribe (gpt-4o-mini-transcribe)
+    S->>L: structure SOAP (cached prompt, Claude)
     S->>DB: meter usage in ai_usage_log (monthly cap enforced)
     S-->>GP: structured SOAP draft
     GP->>GP: human review + edit (AI content never auto-saves)
     GP->>DB: save consultation (audit-logged)
 ```
 </details>
+</details>
 
 ### 3.3 Lab result in (via HealthLink bridge) → GP callback
+
+<img src="diagrams/flow-4-h-e16ad251.svg" alt="diagram 4" width="100%" />
+
+<details><summary>Mermaid source</summary>
 
 <img src="diagrams/flow-4-h-e16ad251.svg" alt="diagram 4" width="100%" />
 
@@ -183,8 +201,13 @@ sequenceDiagram
     GP->>GP: reviews result, phones patient — abnormal never auto-delivered
 ```
 </details>
+</details>
 
 ### 3.4 Repeat prescription → GP approval → Healthmail
+
+<img src="diagrams/flow-5-p-488fc4e7.svg" alt="diagram 5" width="100%" />
+
+<details><summary>Mermaid source</summary>
 
 <img src="diagrams/flow-5-p-488fc4e7.svg" alt="diagram 5" width="100%" />
 
@@ -207,8 +230,13 @@ sequenceDiagram
     Note over PH: pharmacy dispenses
 ```
 </details>
+</details>
 
 ### 3.5 eReferral out (Cúram → HealthLink)
+
+<img src="diagrams/flow-6-gp-191beefa.svg" alt="diagram 6" width="100%" />
+
+<details><summary>Mermaid source</summary>
 
 <img src="diagrams/flow-6-gp-191beefa.svg" alt="diagram 6" width="100%" />
 
@@ -232,8 +260,13 @@ sequenceDiagram
     B->>DB: REF inbound → referral status updated, inbox entry
 ```
 </details>
+</details>
 
 ### 3.6 CDM review cycle (nurse → GP → PCRS)
+
+<img src="diagrams/flow-7-w-a6729132.svg" alt="diagram 7" width="100%" />
+
+<details><summary>Mermaid source</summary>
 
 <img src="diagrams/flow-7-w-a6729132.svg" alt="diagram 7" width="100%" />
 
@@ -254,6 +287,7 @@ sequenceDiagram
     DB->>DB: next_review_date advanced 6 months
 ```
 </details>
+</details>
 
 ## 4. Cross-cutting rules (enforced in code)
 
@@ -267,5 +301,5 @@ sequenceDiagram
 
 - **Bridge offline = delayed, not lost.** HealthLink queues messages; the bridge drains them on next start (auto-starts with the OS). Keep the bridge machine on during opening hours.
 - **Feature flags** (Supabase secrets): `SMS_ENABLED`, `HEALTHMAIL_ENABLED` — external accounts must be provisioned first (Twilio number, Healthmail IMAP/SMTP confirmation).
-- **Pending user-side setup**: OpenAI + Anthropic keys (scribe), Twilio number, Stripe test keys + webhook secret, Supabase anon key in `patient-app/app.json`.
+- **Pending user-side setup**: LiteLLM gateway URL + key (scribe) or direct OpenAI/Anthropic keys, Twilio number, Stripe test keys + webhook secret, Supabase anon key in `patient-app/app.json`.
 - **HealthLink formal integration testing** (month 16 per build plan) provisions the real endpoint + certificate for the bridge.
