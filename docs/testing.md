@@ -353,7 +353,31 @@ supabase secrets set RESEND_FROM="Cúram <onboarding@resend.dev>"
 
 Test the whole book → confirmation → reminder loop sending to yourself.
 
-### 7.2 Healthmail flow (SMTP/IMAP) — captured test inbox
+### 7.2 Automated email test suite (repeatable — no accounts needed)
+
+```bash
+npm run test:email               # SMTP round-trips against Ethereal
+CURAM_LIVE_SMOKE=1 npm run test:email   # + deployed function auth checks
+```
+
+`tests/email/email.test.mjs` (node:test) auto-generates a fresh free Ethereal
+account every run — nothing to sign up for, nothing delivered to real
+recipients, and every captured message is asserted via its preview URL:
+
+- Ethereal account auto-creation (free provider reachable)
+- **Prescription email round-trip** — mirrors the `send-healthmail` transporter
+  config + prescription template verbatim (drug/dose/patient/prescriber/
+  S.I. 94 of 2020 footer all asserted)
+- **Booking confirmation** — mirrors `booking-mail.ts` texts, asserts Dublin
+  timezone rendering (`Europe/Dublin`) and booked/cancelled verb consistency
+- **Live smoke** (opt-in via `CURAM_LIVE_SMOKE=1`) — the deployed
+  `healthmail-connect` / `send-booking-email` / `send-healthmail` functions
+  must be up and reject unauthenticated calls (401/403)
+
+If you change the templates or transport config in those functions, update the
+mirrors in the test file so the suite keeps guarding real behaviour.
+
+### 7.3 Healthmail flow (SMTP/IMAP) — captured test inbox
 
 Real `@healthmail.ie` accounts need GPIT accreditation, so test against a fake
 SMTP catcher. Recommended: **Ethereal** (ethereal.email — by the Nodemailer
