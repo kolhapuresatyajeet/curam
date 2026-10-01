@@ -111,8 +111,8 @@ export async function updateInvoicePayment(
 /** True when the practice has connected its own Stripe key (optional feature). */
 export async function fetchStripeConnected(): Promise<boolean> {
   if (!supabase) return false;
-  const { data } = await supabase.from('practice_vault_refs').select('stripe_secret_id').maybeSingle();
-  return Boolean(data?.stripe_secret_id);
+  const { data } = await supabase.rpc('practice_has_own_stripe_key');
+  return Boolean(data);
 }
 
 /** Admin (gp/pm) onboards a staff member: DB row with user_id null until they sign in. */

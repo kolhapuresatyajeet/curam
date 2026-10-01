@@ -314,6 +314,7 @@ function HealthmailForm() {
 function StripeKeyForm() {
   const [publishable, setPublishable] = useState('');
   const [secret, setSecret] = useState('');
+  const [webhookSecret, setWebhookSecret] = useState('');
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
@@ -326,7 +327,7 @@ function StripeKeyForm() {
         void (async () => {
           setError('');
           setBusy(true);
-          const result = await saveStripeKeyRemote(publishable, secret);
+          const result = await saveStripeKeyRemote(publishable, secret, webhookSecret || undefined);
           setBusy(false);
           if (result.ok) {
             setSaved(true);
@@ -344,10 +345,13 @@ function StripeKeyForm() {
       <Field label="Secret key (sk_…)">
         <input className={inputClass} type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="sk_live_… or sk_test_…" required />
       </Field>
+      <Field label="Webhook signing secret (whsec_…, optional)">
+        <input className={inputClass} type="password" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} placeholder="whsec_… from your Stripe webhook endpoint" />
+      </Field>
       <AppButton type="submit" size="sm" variant="primary" disabled={busy}>
         {busy ? 'Saving…' : 'Save Stripe key'}
       </AppButton>
-      {saved && <p className="text-xs text-teal-700">Stripe key stored in the vault.</p>}
+      {saved && <p className="text-xs text-teal-700">Stripe keys stored securely (server-side only).</p>}
       {error && <p className="text-xs text-red-600">{error}</p>}
     </form>
   );

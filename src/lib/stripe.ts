@@ -50,8 +50,13 @@ export async function createPaymentLinkRemote(
 export async function saveStripeKeyRemote(
   publishableKey: string,
   secretKey: string,
+  webhookSecret?: string,
 ): Promise<{ ok: true; live: boolean } | { ok: false; error: string }> {
-  const { ok, payload } = await authedPost('save-stripe-key', { publishableKey, secretKey });
+  const { ok, payload } = await authedPost('save-stripe-key', {
+    publishableKey,
+    secretKey,
+    ...(webhookSecret ? { webhookSecret } : {}),
+  });
   if (!ok || !payload.ok) return { ok: false, error: payload.error ?? 'Could not save key' };
   return { ok: true, live: Boolean(payload.live) };
 }

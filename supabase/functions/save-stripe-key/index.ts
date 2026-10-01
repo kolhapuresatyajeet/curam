@@ -1,7 +1,7 @@
 import { cors, json } from '../_shared/http.ts';
 
-// Saves a practice's own Stripe secret key into Supabase Vault (never a plain table).
-// Only GP / practice-manager roles may set keys.
+// Saves a practice's own Stripe keys into practice_billing_keys (RLS deny-all;
+// service-role only). Only GP / practice-manager roles may set keys.
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -31,39 +31,23 @@ Deno.serve(async (req) => {
   const body = await req.json();
   const secretKey = String(body.secretKey ?? '').trim();
   const publishable = String(body.publishableKey ?? '').trim();
+  const webhookSecret = String(body.webhookSecret ?? '').trim();
   if (!secretKey.startsWith('sk_')) return json({ error: 'Enter the Stripe secret key (starts with sk_)' }, 400);
   if (!secretKey.startsWith('sk_test_') && !secretKey.startsWith('sk_live_')) {
     return json({ error: 'Unrecognised key format' }, 400);
   }
-
-  // Vault: secret value is encrypted at rest; only service role can read decrypted_secrets.
-  const { data: vaultRow, error: vaultError } = await admin.rpc('vault_create_secret', {
-    p_name: `stripe_sk_${staff.practice_id}`,
-    p_secret: secretKey,
-  });
-  if (vaultError || !vaultRow) {
-    // Fallback for CLI-vault quirks: try direct insert.
-    const { data: inserted, error: insertError } = await admin
-      .from('vault.secrets')
-      .insert({ name: `stripe_sk_${staff.practice_id}`, secret: secretKey })
-      .select('id')
-      .single();
-    if (insertError || !inserted) return json({ error: vaultError?.message ?? insertError?.message ?? 'Could not store key' }, 500);
-    await admin.from('practice_vault_refs').upsert({
-      practice_id: staff.practice_id,
-      stripe_secret_id: inserted.id,
-      stripe_publishable: publishable || null,
-    });
-    return json({ ok: true });
+  if (webhookSecret && !webhookSecret.startsWith('whsec_')) {
+    return json({ error: 'Webhook signing secret must start with whsec_' }, 400);
   }
 
-  await admin.from('practice_vault_refs').upsert({
+  const { error } = await admin.from('practice_billing_keys').upsert({
     practice_id: staff.practice_id,
-    stripe_secret_id: vaultRow,
+    stripe_secret_key: secretKey,
+    stripe_webhook_secret: webhookSecret || null,
     stripe_publishable: publishable || null,
+    updated_at: new Date().toISOString(),
   });
+  if (error) return json({ error: error.message }, 500);
 
   return json({ ok: true, live: secretKey.startsWith('sk_live_') });
 });
-
-// helper RPC fallback used above is created in migration 014.

@@ -30,7 +30,7 @@ async function verifyStripeSignature(payload: string, header: string, secret: st
 async function markInvoicePaid(admin: any, invoiceId: string, amountPaidCents: number, paymentId: string) {
   const { data: invoice } = await admin
     .from('invoices')
-    .select('id, amount, paid_amount, status')
+    .select('id, practice_id, patient_id, amount, paid_amount, status')
     .eq('id', invoiceId)
     .maybeSingle();
   if (!invoice) return { error: 'invoice not found' };
@@ -41,18 +41,47 @@ async function markInvoicePaid(admin: any, invoiceId: string, amountPaidCents: n
     .from('invoices')
     .update({ paid_amount: paid, status, stripe_payment_id: paymentId })
     .eq('id', invoice.id);
+  if (!error) {
+    // HIQA: every mutation writes to audit_log. Webhook is a system actor (no user).
+    await admin.from('audit_log').insert({
+      practice_id: invoice.practice_id,
+      user_id: null,
+      action: 'invoice.payment_recorded',
+      entity_type: 'invoice',
+      entity_id: invoice.id,
+      patient_id: invoice.patient_id,
+      details_json: { amount_paid_cents: amountPaidCents, stripe_payment_id: paymentId, new_status: status },
+    });
+  }
   return { error: error?.message };
 }
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
-  const secret = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
-  const signatureHeader = req.headers.get('stripe-signature') ?? '';
   const payload = await req.text();
+  const signatureHeader = req.headers.get('stripe-signature') ?? '';
 
-  if (secret) {
-    const valid = await verifyStripeSignature(payload, signatureHeader, secret);
+  // Signing secrets, in order: the platform account, then each practice's own
+  // vaulted whsec_ (per-clinic Stripe accounts have their own webhook endpoints).
+  const candidates: string[] = [];
+  const envSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
+  if (envSecret) candidates.push(envSecret);
+  {
+    const { data: keys } = await admin
+      .from('practice_billing_keys')
+      .select('stripe_webhook_secret')
+      .not('stripe_webhook_secret', 'is', null);
+    for (const row of keys ?? []) {
+      if (row.stripe_webhook_secret) candidates.push(row.stripe_webhook_secret);
+    }
+  }
+
+  let valid = false;
+  if (candidates.length > 0) {
+    for (const secret of candidates) {
+      if (await verifyStripeSignature(payload, signatureHeader, secret)) { valid = true; break; }
+    }
     if (!valid) return json({ error: 'Invalid signature' }, 400);
   }
 

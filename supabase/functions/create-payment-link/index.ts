@@ -30,20 +30,24 @@ Deno.serve(async (req) => {
   if (!invoice || invoice.practice_id !== staff.practice_id) return json({ error: 'Invoice not found' }, 404);
   if (invoice.status === 'paid') return json({ error: 'Invoice is already paid' }, 409);
 
-  const { data: ref } = await admin
-    .from('practice_vault_refs')
-    .select('stripe_secret_id, stripe_publishable')
-    .eq('practice_id', staff.practice_id)
-    .maybeSingle();
-  if (!ref?.stripe_secret_id) return json({ error: 'Stripe is not connected. Add the practice key in Settings → Integrations.' }, 503);
-
-  const { data: secretRow } = await admin
-    .from('vault.decrypted_secrets')
-    .select('decrypted_secret')
-    .eq('id', ref.stripe_secret_id)
-    .maybeSingle();
-  const stripeKey = secretRow?.decrypted_secret;
-  if (!stripeKey) return json({ error: 'Stripe key could not be read from the vault' }, 500);
+  // Practice's own key first (per-clinic Stripe). Falls back to the
+  // platform-level key (e.g. a demo/test account) so billing works before the
+  // practice has connected their own Stripe account.
+  let stripeKey: string | null = null;
+  let keySource: 'practice_vault' | 'platform' = 'platform';
+  {
+    const { data: keys } = await admin
+      .from('practice_billing_keys')
+      .select('stripe_secret_key')
+      .eq('practice_id', staff.practice_id)
+      .maybeSingle();
+    stripeKey = keys?.stripe_secret_key ?? null;
+    if (stripeKey) keySource = 'practice_vault';
+  }
+  if (!stripeKey) stripeKey = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
+  if (!stripeKey) {
+    return json({ error: 'Stripe is not connected. Add the practice key in Settings → Integrations.' }, 503);
+  }
 
   const unpaid = Math.round((Number(invoice.amount) - Number(invoice.paid_amount)) * 100);
   if (unpaid <= 0) return json({ error: 'Nothing left to pay' }, 409);
@@ -98,5 +102,5 @@ Deno.serve(async (req) => {
     }
   }
 
-  return json({ url: link.url, emailed });
+  return json({ url: link.url, emailed, keySource });
 });
