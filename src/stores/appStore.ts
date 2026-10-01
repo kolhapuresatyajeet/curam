@@ -1,11 +1,12 @@
 import { useSyncExternalStore } from 'react';
 import { createAuditEntry } from '@/lib/audit';
-import { createSeedState } from '@/data/seed';
+import { createBlankState, createSeedState } from '@/data/seed';
 import { formatPrescriptionEmail } from '@/lib/healthmail';
 import { detectEmergency } from '@/lib/sile';
 import { draftSoapFromTranscript, suggestIcpc2 } from '@/lib/ai-scribe';
 import { detectBillingSource } from '@/lib/stripe';
 import { id, nowIso } from '@/lib/utils';
+import { supabaseConfigured } from '@/lib/supabase';
 import type {
   Appointment,
   AppointmentStatus,
@@ -28,6 +29,9 @@ let state: PracticeState = load();
 const listeners = new Set<() => void>();
 
 function load(): PracticeState {
+  // Live app: never boot from demo seed or stale localStorage — everything
+  // hydrates from the database after sign-in. Seed data is demo-mode only.
+  if (supabaseConfigured) return createBlankState();
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) return JSON.parse(raw) as PracticeState;

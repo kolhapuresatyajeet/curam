@@ -143,3 +143,50 @@ function todayAt(hours: number, minutes: number): string {
   d.setHours(hours, minutes, 0, 0);
   return d.toISOString();
 }
+
+/**
+ * Blank state for the live app (Supabase configured): no demo patients, staff,
+ * invoices or sessions — everything hydrates from the database after sign-in.
+ * The healthmail directory is static reference data, so it is kept.
+ */
+export function createBlankState(): PracticeState {
+  const blank = createSeedState();
+  return {
+    ...blank,
+    practice: {
+      ...blank.practice,
+      id: 'prac_local',
+      name: '',
+      address: '',
+      eircode: '',
+      phone: '',
+      healthlinkId: '',
+      healthmail: '',
+      pcrsReg: '',
+      stripeAccountId: '',
+    },
+    session: { staffId: '', expiresAt: 0 },
+    staff: [],
+    patients: [],
+    conditions: [],
+    consultations: [],
+    prescriptions: [],
+    repeatRequests: [],
+    labResults: [],
+    referrals: [],
+    cdmEnrolments: [],
+    cdmReviews: [],
+    appointments: [],
+    waitingRoom: [],
+    invoices: [],
+    pcrsClaims: [],
+    inbox: [],
+    smsLog: [],
+    workflows: blank.workflows.map((wf) => ({ ...wf, runCount: 0 })),
+    workflowRuns: [],
+    sileCalls: [],
+    auditLog: [],
+    vaccines: [],
+    documents: [],
+  };
+}
