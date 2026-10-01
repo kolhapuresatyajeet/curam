@@ -47,16 +47,42 @@ export async function createPaymentLinkRemote(
   return { ok: true, url: payload.url, emailed: Boolean(payload.emailed) };
 }
 
-export async function saveStripeKeyRemote(
-  publishableKey: string,
-  secretKey: string,
-  webhookSecret?: string,
-): Promise<{ ok: true; live: boolean } | { ok: false; error: string }> {
-  const { ok, payload } = await authedPost('save-stripe-key', {
-    publishableKey,
-    secretKey,
-    ...(webhookSecret ? { webhookSecret } : {}),
+async function authedGet(path: string) {
+  const { supabase, supabaseConfigured, getSupabaseConfig } = await import('@/lib/supabase');
+  if (!supabaseConfigured || !supabase) return { ok: false, payload: { error: 'Supabase is not configured' } as Record<string, unknown> };
+  const { url, anonKey } = getSupabaseConfig();
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return { ok: false, payload: { error: 'Sign in first' } };
+  const response = await fetch(`${url}/functions/v1/${path}`, {
+    headers: { Authorization: `Bearer ${token}`, apikey: anonKey },
   });
-  if (!ok || !payload.ok) return { ok: false, error: payload.error ?? 'Could not save key' };
-  return { ok: true, live: Boolean(payload.live) };
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  return { ok: response.ok, payload };
+}
+
+/** Current practice's Stripe Connect status (Express hosted onboarding). */
+export async function stripeConnectStatus(): Promise<{
+  connected: boolean;
+  charges_enabled?: boolean;
+  payouts_enabled?: boolean;
+  details_submitted?: boolean;
+  status?: string;
+}> {
+  const { ok, payload } = await authedGet('stripe-connect-onboard');
+  if (!ok) return { connected: false };
+  return {
+    connected: Boolean(payload.connected),
+    charges_enabled: payload.charges_enabled as boolean | undefined,
+    payouts_enabled: payload.payouts_enabled as boolean | undefined,
+    details_submitted: payload.details_submitted as boolean | undefined,
+    status: payload.status as string | undefined,
+  };
+}
+
+/** Start (or restart) Stripe Express onboarding; returns the hosted link. */
+export async function stripeConnectOnboard(): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const { ok, payload } = await authedPost('stripe-connect-onboard', {});
+  if (!ok || !payload.url) return { ok: false, error: (payload.error as string) ?? 'Could not start Stripe onboarding' };
+  return { ok: true, url: payload.url as string };
 }

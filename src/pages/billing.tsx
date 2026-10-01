@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AppButton, Badge, SectionTitle, TableShell, Tabs } from '@/components/shared/ui';
-import { fetchInvoices, fetchStripeConnected, updateInvoicePayment } from '@/lib/db';
+import { fetchInvoices, updateInvoicePayment } from '@/lib/db';
 import { createPaymentLinkRemote } from '@/lib/stripe';
 import { openReceipt } from '@/lib/receipt';
 import { supabaseConfigured } from '@/lib/supabase';
@@ -64,7 +64,7 @@ export default function BillingPage() {
   const [tab, setTab] = useState('Overview');
   const [status, setStatus] = useState<InvoiceStatus | 'all'>('all');
   const [loaded, setLoaded] = useState(false);
-  const [stripeConnected, setStripeConnected] = useState(false);
+  const [stripeConnected, setStripeConnected] = useState(true);
 
   // Pull real invoices from Supabase (including auto-invoices created by the DB trigger).
   useEffect(() => {
@@ -73,7 +73,6 @@ export default function BillingPage() {
     void fetchInvoices().then((invoices) => {
       if (invoices.length) appStore.upsertInvoices(invoices);
     });
-    void fetchStripeConnected().then(setStripeConnected);
   }, [loaded]);
 
   const invoices = useMemo(

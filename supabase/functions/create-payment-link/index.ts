@@ -1,7 +1,8 @@
 import { cors, json } from '../_shared/http.ts';
 
-// Creates a real Stripe Payment Link for an invoice using the practice's own
-// Stripe key (from Vault) and stores the URL on the invoice. Emails the patient.
+// Creates a real Stripe Payment Link for an invoice in the practice's own
+// Stripe account (Stripe Connect; platform key fallback for demos) and stores
+// the URL on the invoice. Emails the patient.
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -30,23 +31,38 @@ Deno.serve(async (req) => {
   if (!invoice || invoice.practice_id !== staff.practice_id) return json({ error: 'Invoice not found' }, 404);
   if (invoice.status === 'paid') return json({ error: 'Invoice is already paid' }, 409);
 
-  // Practice's own key first (per-clinic Stripe). Falls back to the
-  // platform-level key (e.g. a demo/test account) so billing works before the
-  // practice has connected their own Stripe account.
+  // Key resolution, most-to-least specific:
+  //  1. practice_billing_keys.stripe_secret_key — manually-pasted legacy key
+  //  2. platform STRIPE_SECRET_KEY + Stripe-Account header (Stripe Connect:
+  //     the practice's own connected account — money lands with the practice)
+  //  3. platform key alone (demo/test fallback account)
+  const platformKey = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
+  const { data: keys } = await admin
+    .from('practice_billing_keys')
+    .select('stripe_secret_key')
+    .eq('practice_id', staff.practice_id)
+    .maybeSingle();
+  const { data: practice } = await admin
+    .from('practices')
+    .select('stripe_account_id')
+    .eq('id', staff.practice_id)
+    .maybeSingle();
+
   let stripeKey: string | null = null;
-  let keySource: 'practice_vault' | 'platform' = 'platform';
-  {
-    const { data: keys } = await admin
-      .from('practice_billing_keys')
-      .select('stripe_secret_key')
-      .eq('practice_id', staff.practice_id)
-      .maybeSingle();
-    stripeKey = keys?.stripe_secret_key ?? null;
-    if (stripeKey) keySource = 'practice_vault';
+  let accountHeader: string | undefined;
+  let keySource: 'practice_key' | 'connect' | 'platform' = 'platform';
+  if (keys?.stripe_secret_key) {
+    stripeKey = keys.stripe_secret_key;
+    keySource = 'practice_key';
+  } else if (practice?.stripe_account_id && platformKey) {
+    stripeKey = platformKey;
+    accountHeader = practice.stripe_account_id;
+    keySource = 'connect';
+  } else if (platformKey) {
+    stripeKey = platformKey;
   }
-  if (!stripeKey) stripeKey = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
   if (!stripeKey) {
-    return json({ error: 'Stripe is not connected. Add the practice key in Settings → Integrations.' }, 503);
+    return json({ error: 'Stripe is not connected. The practice can connect Stripe in Settings → Integrations.' }, 503);
   }
 
   const unpaid = Math.round((Number(invoice.amount) - Number(invoice.paid_amount)) * 100);
@@ -70,6 +86,7 @@ Deno.serve(async (req) => {
     headers: {
       Authorization: `Bearer ${stripeKey}`,
       'Content-Type': 'application/x-www-form-urlencoded',
+      ...(accountHeader ? { 'Stripe-Account': accountHeader } : {}),
     },
     body: form,
   });

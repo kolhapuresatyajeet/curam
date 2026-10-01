@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { AppButton, Badge, Field, SectionTitle, Tabs, inputClass } from '@/components/shared/ui';
 import { connectGoogleCalendar, disconnectGoogleCalendar } from '@/lib/google-calendar';
 import { connectHealthmail } from '@/lib/db';
-import { saveStripeKeyRemote } from '@/lib/stripe';
+import { stripeConnectOnboard, stripeConnectStatus } from '@/lib/stripe';
 import { refreshSchedule } from '@/lib/schedule';
 import { useSupabaseAuth } from '@/stores/authSession';
 import { formatIrishDateTime } from '@/lib/utils';
@@ -60,10 +60,11 @@ export default function SettingsPage() {
             <div className="text-sm font-semibold">Stripe — online payments (optional)</div>
             <p className="text-[12px] text-slate-600">
               Optional — skip this if the practice takes cash or card payments in-room only; those are recorded directly in Billing.
-              To take payments online, paste the practice's own Stripe secret key (Developers → API keys). It is stored encrypted in
-              the Supabase Vault and never leaves the server.
+              To take payments online, connect the practice's own Stripe account: you'll be taken to Stripe's secure setup
+              (business details, IBAN, payouts) and returned here. Cúram never sees your Stripe credentials, and payments go
+              straight to the practice's account.
             </p>
-            <StripeKeyForm />
+            <StripeConnectCard />
           </div>
           <div className="surface max-w-lg space-y-3 rounded-xl p-4">
             <div className="text-sm font-semibold">Google Calendar</div>
@@ -311,48 +312,72 @@ function HealthmailForm() {
   );
 }
 
-function StripeKeyForm() {
-  const [publishable, setPublishable] = useState('');
-  const [secret, setSecret] = useState('');
-  const [webhookSecret, setWebhookSecret] = useState('');
+function StripeConnectCard() {
+  const [status, setStatus] = useState<{
+    connected: boolean;
+    charges_enabled?: boolean;
+    payouts_enabled?: boolean;
+    details_submitted?: boolean;
+    status?: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
+  const loadStatus = () => {
+    void stripeConnectStatus().then((s) => setStatus(s));
+  };
+
+  useEffect(() => {
+    // Returning from Stripe onboarding lands back here with ?stripe=return|refresh.
+    const flag = new URLSearchParams(window.location.search).get('stripe');
+    if (flag) window.history.replaceState({}, '', window.location.pathname);
+    loadStatus();
+  }, []);
+
+  const startOnboarding = () => {
+    setError('');
+    setBusy(true);
+    void (async () => {
+      const result = await stripeConnectOnboard();
+      setBusy(false);
+      if (result.ok) {
+        window.location.href = result.url;
+      } else {
+        setError(result.error);
+      }
+    })();
+  };
+
+  if (status && status.connected && status.details_submitted) {
+    const ready = status.charges_enabled && status.payouts_enabled;
+    return (
+      <div className="space-y-2">
+        <Badge tone={ready ? 'positive' : 'caution'}>
+          {ready ? 'Stripe connected' : 'Connected — finishing Stripe checks'}
+        </Badge>
+        <p className="text-[11px] text-slate-500">
+          {ready
+            ? 'Online payments are active. Payments go directly to the practice account.'
+            : 'The practice still needs to finish some steps in the Stripe dashboard before payments can be taken.'}
+        </p>
+        {!ready && (
+          <AppButton size="sm" variant="secondary" disabled={busy} onClick={startOnboarding}>
+            {busy ? 'Opening…' : 'Continue setup'}
+          </AppButton>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <form
-      className="space-y-3"
-      onSubmit={(event) => {
-        event.preventDefault();
-        void (async () => {
-          setError('');
-          setBusy(true);
-          const result = await saveStripeKeyRemote(publishable, secret, webhookSecret || undefined);
-          setBusy(false);
-          if (result.ok) {
-            setSaved(true);
-            setSecret('');
-            setTimeout(() => setSaved(false), 3000);
-          } else {
-            setError(result.error);
-          }
-        })();
-      }}
-    >
-      <Field label="Publishable key (pk_…)">
-        <input className={inputClass} value={publishable} onChange={(e) => setPublishable(e.target.value)} placeholder="pk_live_… or pk_test_…" />
-      </Field>
-      <Field label="Secret key (sk_…)">
-        <input className={inputClass} type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="sk_live_… or sk_test_…" required />
-      </Field>
-      <Field label="Webhook signing secret (whsec_…, optional)">
-        <input className={inputClass} type="password" value={webhookSecret} onChange={(e) => setWebhookSecret(e.target.value)} placeholder="whsec_… from your Stripe webhook endpoint" />
-      </Field>
-      <AppButton type="submit" size="sm" variant="primary" disabled={busy}>
-        {busy ? 'Saving…' : 'Save Stripe key'}
+    <div className="space-y-2">
+      <AppButton size="sm" variant="primary" disabled={busy} onClick={startOnboarding}>
+        {busy ? 'Opening Stripe…' : 'Connect with Stripe'}
       </AppButton>
-      {saved && <p className="text-xs text-teal-700">Stripe keys stored securely (server-side only).</p>}
+      {status?.connected && !status.details_submitted && (
+        <p className="text-[11px] text-amber-700">Setup was started but not finished — click connect to continue.</p>
+      )}
       {error && <p className="text-xs text-red-600">{error}</p>}
-    </form>
+    </div>
   );
 }

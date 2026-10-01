@@ -108,13 +108,6 @@ export async function updateInvoicePayment(
   return { error };
 }
 
-/** True when the practice has connected its own Stripe key (optional feature). */
-export async function fetchStripeConnected(): Promise<boolean> {
-  if (!supabase) return false;
-  const { data } = await supabase.rpc('practice_has_own_stripe_key');
-  return Boolean(data);
-}
-
 /** Admin (gp/pm) onboards a staff member: DB row with user_id null until they sign in. */
 export async function inviteStaffMember(input: { practiceId: string; name: string; role: Staff['role']; email: string }) {
   if (!supabase) return { error: new Error('Supabase is not configured') };
