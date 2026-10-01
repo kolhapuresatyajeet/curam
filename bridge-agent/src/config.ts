@@ -59,18 +59,28 @@ export function saveConfig(config: BridgeConfig): void {
 }
 
 // On first launch, look for a HealthLink PFX certificate in the common
-// locations. On Windows the cert typically lives in the user store; the
-// practice exports it to PFX once and the agent reads it from disk.
+// locations on each platform. On Windows the cert typically lives in the
+// user store (export once to PFX); on macOS it is exported from Keychain
+// Access to a PFX file.
 export function detectCertificate(config: BridgeConfig): string | null {
   if (config.healthlink.certPath && fs.existsSync(config.healthlink.certPath)) {
     return config.healthlink.certPath;
   }
+  const home = process.env.HOME ?? '';
   const candidates = [
+    // Windows: %APPDATA% (may be undefined on other platforms)
     process.env.APPDATA
       ? path.join(process.env.APPDATA, 'HealthLink', 'certificate.pfx')
       : null,
     process.env.APPDATA
       ? path.join(process.env.APPDATA, 'curam-bridge', 'certificate.pfx')
+      : null,
+    // macOS: same folder the app data lives in.
+    home
+      ? path.join(home, 'Library', 'Application Support', 'HealthLink', 'certificate.pfx')
+      : null,
+    home
+      ? path.join(home, 'Library', 'Application Support', 'curam-bridge', 'certificate.pfx')
       : null,
   ].filter((p): p is string => Boolean(p));
   for (const candidate of candidates) {

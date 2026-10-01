@@ -8,7 +8,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "npm run build && electron .",
-    "dist": "npm run build && electron-builder --win nsis"
+    "dist": "npm run build && electron-builder --win nsis",
+    "dist:mac": "npm run build && electron-builder --mac dmg",
+    "dist:win": "npm run build && electron-builder --win nsis"
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -23,6 +25,10 @@
     "appId": "ie.curam.healthlink.bridge",
     "files": ["dist/**/*", "package.json"],
     "win": { "target": "nsis" },
-    "nsis": { "oneClick": true, "autoStartOnLaunch": true }
+    "nsis": { "oneClick": true, "autoStartOnLaunch": true },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.medical"
+    }
   }
 }
