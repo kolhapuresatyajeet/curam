@@ -41,6 +41,10 @@
 
 ## 2. Component diagram
 
+<img src="diagrams/flow-1-components-ba53b469.svg" alt="diagram 1" width="100%" />
+
+<details><summary>Mermaid source</summary>
+
 ```mermaid
 flowchart TB
     subgraph Clients
@@ -97,10 +101,15 @@ flowchart TB
     HM --> HEALTHMAIL
     VAPI --> BOOK
 ```
+</details>
 
 ## 3. Happy flows
 
 ### 3.1 Booking + reminders (staff, Síle or patient app)
+
+<img src="diagrams/flow-2-c-43c4634f.svg" alt="diagram 2" width="100%" />
+
+<details><summary>Mermaid source</summary>
 
 ```mermaid
 sequenceDiagram
@@ -119,8 +128,13 @@ sequenceDiagram
     CR->>TW: SMS reminder (per patient)
     CR->>DB: mark reminder_sent
 ```
+</details>
 
 ### 3.2 Consultation with AI Scribe
+
+<img src="diagrams/flow-3-gp-b3a9b516.svg" alt="diagram 3" width="100%" />
+
+<details><summary>Mermaid source</summary>
 
 ```mermaid
 sequenceDiagram
@@ -139,8 +153,13 @@ sequenceDiagram
     GP->>GP: human review + edit (AI content never auto-saves)
     GP->>DB: save consultation (audit-logged)
 ```
+</details>
 
 ### 3.3 Lab result in (via HealthLink bridge) → GP callback
+
+<img src="diagrams/flow-4-h-e16ad251.svg" alt="diagram 4" width="100%" />
+
+<details><summary>Mermaid source</summary>
 
 ```mermaid
 sequenceDiagram
@@ -163,8 +182,13 @@ sequenceDiagram
     WF->>DB: route per workflow: task for GP callback
     GP->>GP: reviews result, phones patient — abnormal never auto-delivered
 ```
+</details>
 
 ### 3.4 Repeat prescription → GP approval → Healthmail
+
+<img src="diagrams/flow-5-p-488fc4e7.svg" alt="diagram 5" width="100%" />
+
+<details><summary>Mermaid source</summary>
 
 ```mermaid
 sequenceDiagram
@@ -182,8 +206,13 @@ sequenceDiagram
     HM->>DB: log send (audit)
     Note over PH: pharmacy dispenses
 ```
+</details>
 
 ### 3.5 eReferral out (Cúram → HealthLink)
+
+<img src="diagrams/flow-6-gp-191beefa.svg" alt="diagram 6" width="100%" />
+
+<details><summary>Mermaid source</summary>
 
 ```mermaid
 sequenceDiagram
@@ -202,8 +231,13 @@ sequenceDiagram
     S-->>H: REF^I12 ack (appointment date)
     B->>DB: REF inbound → referral status updated, inbox entry
 ```
+</details>
 
 ### 3.6 CDM review cycle (nurse → GP → PCRS)
+
+<img src="diagrams/flow-7-w-a6729132.svg" alt="diagram 7" width="100%" />
+
+<details><summary>Mermaid source</summary>
 
 ```mermaid
 sequenceDiagram
@@ -219,6 +253,7 @@ sequenceDiagram
     DB->>DB: PCRS claim auto-staged (STC: CDM)
     DB->>DB: next_review_date advanced 6 months
 ```
+</details>
 
 ## 4. Cross-cutting rules (enforced in code)
 
