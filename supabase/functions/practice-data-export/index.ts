@@ -4,7 +4,10 @@ import { cors, json } from '../_shared/http.ts';
 //
 //  - No params: whole-practice JSON export (every clinical + admin table).
 //  - ?patientId=<uuid>: one patient's record as JSON (SAR support).
-//  - ?format=csv: patients list as CSV (mail merges, PCRS, switching out).
+//  - ?patientId=<uuid>&format=csv: the patient's clinical history as one
+//    CSV (a row per event — consultations, prescriptions, labs, referrals,
+//    appointments, CDM reviews), sorted newest first.
+//  - ?format=csv (no patientId): patients list as CSV.
 //
 // Every export writes to audit_log (HIQA): who exported what, when.
 // The consultations caveat: notes typed in the web app before DB sync was
@@ -91,7 +94,81 @@ Deno.serve(async (req) => {
     return json({ error: 'Data exports are restricted to the GP and practice manager.' }, 403);
   }
 
-  // Whole-practice CSV: patients list.
+  // CSV: patients list (no patientId) or one patient's clinical history.
+  if (format === 'csv' && patientId) {
+    const { data: patient, error: patientError } = await admin
+      .from('patients')
+      .select('id, first_name, last_name, dob')
+      .eq('id', patientId)
+      .eq('practice_id', staff.practice_id)
+      .maybeSingle();
+    if (patientError) return json({ error: patientError.message }, 500);
+    if (!patient) return json({ error: 'Patient not found in this practice' }, 404);
+
+    type HistoryRow = { date: string; type: string; title: string; detail: string; status: string };
+    const rows: HistoryRow[] = [];
+    const day = (iso: string | null | undefined) => (iso ? String(iso).slice(0, 10) : '');
+    const joinSoap = (c: Record<string, unknown>) =>
+      (['subjective', 'objective', 'assessment', 'plan'] as const)
+        .map((k, i) => (c[k] ? `${['S', 'O', 'A', 'P'][i]}: ${c[k]}` : null))
+        .filter(Boolean)
+        .join(' | ');
+
+    const [consults, rxs, labs, refs, appts, cdms] = await Promise.all([
+      admin.from('consultations').select('*').eq('patient_id', patientId),
+      admin.from('prescriptions').select('*').eq('patient_id', patientId),
+      admin.from('lab_results').select('*').eq('patient_id', patientId),
+      admin.from('referrals').select('*').eq('patient_id', patientId),
+      admin.from('appointments').select('*').eq('patient_id', patientId),
+      admin.from('cdm_reviews').select('*').eq('patient_id', patientId),
+    ]);
+
+    for (const c of consults.data ?? []) {
+      rows.push({ date: day(c.signed_at ?? c.created_at), type: 'Consultation', title: String(c.template_type ?? 'gp_consult').replace(/_/g, ' '), detail: joinSoap(c) || (c.ai_transcript ? String(c.ai_transcript).slice(0, 400) : ''), status: String(c.status ?? '') });
+    }
+    for (const r of rxs.data ?? []) {
+      rows.push({ date: day(r.healthmail_sent_at), type: 'Prescription', title: `${r.drug_name}${r.dose ? ` ${r.dose}` : ''}${r.frequency ? ` — ${r.frequency}` : ''}`, detail: r.pharmacy_healthmail ? `Pharmacy: ${r.pharmacy_healthmail}` : '', status: String(r.status ?? '') });
+    }
+    for (const l of labs.data ?? []) {
+      const flags = Array.isArray(l.abnormal_flags) && l.abnormal_flags.length ? ` [ABNORMAL: ${l.abnormal_flags.join(', ')}]` : '';
+      rows.push({ date: day(l.received_at), type: 'Lab result', title: `${l.source_hospital ?? 'Lab'}${flags}`, detail: l.results_json ? JSON.stringify(l.results_json) : (l.gp_comment ?? ''), status: l.gp_reviewed ? 'GP reviewed' : 'Awaiting review' });
+    }
+    for (const r of refs.data ?? []) {
+      rows.push({ date: '', type: 'Referral', title: `${r.specialty ?? 'Specialist'}${r.hospital ? ` — ${r.hospital}` : ''}`, detail: r.healthlink_ref ? `Ref: ${r.healthlink_ref}` : '', status: String(r.status ?? '') });
+    }
+    for (const a of appts.data ?? []) {
+      rows.push({ date: day(a.start_time), type: 'Appointment', title: String(a.type ?? 'appointment').replace(/_/g, ' '), detail: a.sile_triage_notes ? String(a.sile_triage_notes).slice(0, 200) : '', status: String(a.status ?? '') });
+    }
+    for (const v of cdms.data ?? []) {
+      rows.push({ date: day(v.completed_at), type: 'CDM review', title: String(v.review_type ?? 'review'), detail: v.review_data_json ? JSON.stringify(v.review_data_json).slice(0, 400) : '', status: v.gp_signed ? 'GP signed' : v.nurse_signed ? 'Nurse signed' : '' });
+    }
+
+    rows.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const cols = ['date', 'type', 'title', 'detail', 'status'] as const;
+    const lines = [cols.join(',')];
+    for (const row of rows) lines.push(cols.map((col) => csvEscape(row[col])).join(','));
+
+    await admin.from('audit_log').insert({
+      practice_id: staff.practice_id,
+      user_id: userData.user.id,
+      action: 'patient.record_exported',
+      entity_type: 'patient',
+      entity_id: patientId,
+      patient_id: patientId,
+      details_json: { reason: 'SAR / record export (CSV history)', events: rows.length },
+    });
+
+    const safeName = `${patient.first_name}-${patient.last_name}`.replace(/[^a-zA-Z0-9-]+/g, '-');
+    return new Response(lines.join('\n'), {
+      status: 200,
+      headers: {
+        ...cors,
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="curam-${safeName}-history-${new Date().toISOString().slice(0, 10)}.csv"`,
+      },
+    });
+  }
+
   if (format === 'csv') {
     const { data: rows, error } = await admin
       .from('patients')

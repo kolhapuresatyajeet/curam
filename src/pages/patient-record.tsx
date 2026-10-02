@@ -5,7 +5,7 @@ import { ageFromDob, formatIrishDate, formatIrishPhone, id, nowIso } from '@/lib
 import { appStore, useAppState, useSessionStaff } from '@/stores/appStore';
 import { templateLabel } from '@/lib/consultation-templates';
 import { canManagePractice } from '@/lib/roles';
-import { exportPatientRecord } from '@/lib/export';
+import { exportPatientHistoryCsv, exportPatientRecord } from '@/lib/export';
 import { patientName, type ConsultationTemplate } from '@/types/domain';
 
 const TABS = ['Summary', 'Timeline', 'Consultation', 'Prescriptions', 'Results', 'Referrals', 'CDM', 'Vaccines', 'Documents'];
@@ -109,7 +109,15 @@ export default function PatientRecordPage() {
                 <AppButton
                   size="sm"
                   onClick={() => {
-                    void exportPatientRecord(patient.id).then((result) => setExportStatus(result.ok ? `Record downloaded (${result.filename}).` : result.error));
+                    void exportPatientHistoryCsv(patient.id).then((result) => setExportStatus(result.ok ? `Export downloaded (${result.filename}).` : result.error));
+                  }}
+                >
+                  Download history (CSV)
+                </AppButton>
+                <AppButton
+                  size="sm"
+                  onClick={() => {
+                    void exportPatientRecord(patient.id).then((result) => setExportStatus(result.ok ? `Export downloaded (${result.filename}).` : result.error));
                   }}
                 >
                   Download record (JSON)

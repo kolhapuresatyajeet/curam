@@ -57,3 +57,8 @@ export function exportPatientRecord(patientId: string): Promise<ExportResult> {
   const day = new Date().toISOString().slice(0, 10);
   return callExport(`?patientId=${encodeURIComponent(patientId)}`, `curam-patient-record-${day}.json`);
 }
+
+export function exportPatientHistoryCsv(patientId: string): Promise<ExportResult> {
+  const day = new Date().toISOString().slice(0, 10);
+  return callExport(`?patientId=${encodeURIComponent(patientId)}&format=csv`, `curam-patient-history-${day}.csv`);
+}
