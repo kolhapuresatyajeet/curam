@@ -14,6 +14,7 @@ export default function PatientRecordPage() {
   const staff = useSessionStaff();
   const patient = state.patients.find((item) => item.id === params.id);
   const [tab, setTab] = useState('Summary');
+  const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
 
   if (!patient) return <EmptyState title="Patient not found" detail="This record is not on the practice panel." />;
 
@@ -113,20 +114,66 @@ export default function PatientRecordPage() {
           >
             New SOAP note
           </AppButton>
-          {notes.map((note) => (
-            <div key={note.id} className="surface rounded-xl p-4">
-              <div className="text-[11px] text-slate-400">
-                {formatIrishDate(note.createdAt)} · {note.templateType} · {note.status}
-                {note.aiScribeUsed && ' · Síle scribe'}
+          {notes.map((note) => {
+            const expanded = expandedNoteId === note.id;
+            return (
+              <div
+                key={note.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setExpandedNoteId(expanded ? null : note.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedNoteId(expanded ? null : note.id); } }}
+                className={`cursor-pointer rounded-xl text-left transition hover:border-teal-300 ${expanded ? 'surface border border-teal-300 p-4' : 'surface p-4'}`}
+              >
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>
+                    {formatIrishDate(note.createdAt)} · {note.templateType} · {note.status}
+                    {note.aiScribeUsed && ' · Síle scribe'}
+                  </span>
+                  <span className="text-teal-700">{expanded ? 'Hide ▲' : 'Details ▼'}</span>
+                </div>
+                {note.aiSummary && (
+                  <p className="mt-2 rounded-lg bg-[#eef4f9] px-3 py-2 text-[11px] leading-5 text-slate-600">
+                    <span className="font-semibold text-slate-800">Summary: </span>{note.aiSummary}
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-slate-600">{note.assessment || 'Draft'}</p>
+                {expanded && (
+                  <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                    {([['Subjective', note.subjective], ['Objective', note.objective], ['Assessment', note.assessment], ['Plan', note.plan]] as const).map(([label, value]) => (
+                      <div key={label}>
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+                        <p className="text-[12px] leading-5 text-slate-700">{value || '—'}</p>
+                      </div>
+                    ))}
+                    {note.icpc2Codes.length > 0 && (
+                      <p className="text-[11px] text-slate-500"><span className="font-semibold">ICPC-2:</span> {note.icpc2Codes.join(', ')}</p>
+                    )}
+                    {note.aiTranscript && (
+                      <details className="text-[11px] text-slate-500">
+                        <summary className="cursor-pointer">Dictation transcript</summary>
+                        <p className="mt-1 whitespace-pre-wrap italic">{note.aiTranscript}</p>
+                      </details>
+                    )}
+                    {note.signedAt && (
+                      <p className="text-[10px] text-slate-400">Signed {formatIrishDate(note.signedAt)} — locked, cannot be edited.</p>
+                    )}
+                    {note.status === 'draft' && (
+                      <span onClick={(e) => e.stopPropagation()}>
+                        <AppButton
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setLocation(`/patients/${patient.id}/consultation?id=${note.id}`)}
+                        >
+                          Continue editing
+                        </AppButton>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-              {note.aiSummary && note.status === 'signed' && (
-                <p className="mt-2 rounded-lg bg-[#eef4f9] px-3 py-2 text-[11px] leading-5 text-slate-600">
-                  <span className="font-semibold text-slate-800">Summary: </span>{note.aiSummary}
-                </p>
-              )}
-              <p className="mt-2 text-xs text-slate-600">{note.assessment || 'Draft'}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
