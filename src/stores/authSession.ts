@@ -9,6 +9,7 @@ interface AuthSnapshot {
   userId: string | null;
   email: string | null;
   fullName: string | null;
+  platformAdmin: boolean;
   staff: Staff | null;
   needsSetup: boolean;
 }
@@ -18,6 +19,7 @@ let snapshot: AuthSnapshot = {
   userId: null,
   email: null,
   fullName: null,
+  platformAdmin: false,
   staff: null,
   needsSetup: false,
 };
@@ -32,6 +34,7 @@ async function hydrate(
   userId: string | null,
   email: string | null,
   fullName: string | null,
+  platformAdmin = false,
 ) {
   if (!userId) {
     snapshot = {
@@ -39,6 +42,7 @@ async function hydrate(
       userId: null,
       email: null,
       fullName: null,
+      platformAdmin: false,
       staff: null,
       needsSetup: false,
     };
@@ -73,6 +77,7 @@ async function hydrate(
       userId,
       email,
       fullName,
+      platformAdmin,
       staff,
       needsSetup: false,
     };
@@ -82,6 +87,7 @@ async function hydrate(
       userId,
       email,
       fullName,
+      platformAdmin,
       staff: null,
       needsSetup: true,
     };
@@ -89,12 +95,18 @@ async function hydrate(
   emit();
 }
 
+function isPlatformAdminUser(
+  user?: { user_metadata?: Record<string, unknown> } | null,
+): boolean {
+  return user?.user_metadata?.platform_admin === true;
+}
+
 /** Re-fetch the staff row for the current user. Call after bootstrap_practice so the snapshot reflects the new practice. */
 export async function refreshAuthSession() {
   if (!supabase) return;
   const { data } = await supabase.auth.getSession();
   const user = data.session?.user;
-  await hydrate(user?.id ?? null, user?.email ?? null, displayName(user));
+  await hydrate(user?.id ?? null, user?.email ?? null, displayName(user), isPlatformAdminUser(user));
 }
 
 let started = false;
@@ -118,10 +130,10 @@ export async function startAuthListener() {
   }
   const { data } = await supabase.auth.getSession();
   const user = data.session?.user;
-  await hydrate(user?.id ?? null, user?.email ?? null, displayName(user));
+  await hydrate(user?.id ?? null, user?.email ?? null, displayName(user), isPlatformAdminUser(user));
   const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
     const next = session?.user;
-    void hydrate(next?.id ?? null, next?.email ?? null, displayName(next));
+    void hydrate(next?.id ?? null, next?.email ?? null, displayName(next), isPlatformAdminUser(next));
   });
   return () => sub.subscription.unsubscribe();
 }

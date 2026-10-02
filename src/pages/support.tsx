@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'wouter';
 import { AppButton, EmptyState, SectionTitle, inputClass } from '@/components/shared/ui';
 import { impersonate, isPlatformAdmin, listSupportTargets, type SupportPractice, type SupportStaff } from '@/lib/support';
 import { formatIrishDate } from '@/lib/utils';
@@ -8,6 +9,7 @@ import { formatIrishDate } from '@/lib/utils';
 // server); every session start is audit-logged in the target practice.
 
 export default function SupportPage() {
+  const [, setLocation] = useLocation();
   const [checked, setChecked] = useState(false);
   const [allowed, setAllowed] = useState(false);
   const [practices, setPractices] = useState<SupportPractice[]>([]);
@@ -50,6 +52,9 @@ export default function SupportPage() {
     return (
       <div className="fade-in mx-auto max-w-lg p-6">
         <EmptyState title="Platform admin access required" detail="This console is only available to the Cúram platform owner. Sign in with the platform admin account." />
+        <p className="mt-3 text-center text-xs">
+          <button className="text-teal-700 underline" onClick={() => setLocation('/login')}>Go to sign in</button>
+        </p>
       </div>
     );
   }
