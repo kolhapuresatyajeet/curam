@@ -21,7 +21,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
 async function requirePlatformAdmin(admin: ReturnType<typeof createClient>, userId: string) {
-  const { data, error } = await admin.auth.getUserById(userId);
+  const { data, error } = await admin.auth.admin.getUserById(userId);
   if (error || !data.user) return null;
   const meta = (data.user.user_metadata ?? {}) as { platform_admin?: boolean; email?: string };
   return meta.platform_admin === true ? { email: meta.email ?? data.user.email ?? '' } : null;
@@ -71,15 +71,16 @@ Deno.serve(async (req) => {
     if (staffError) return json({ error: staffError.message }, 500);
     if (!staff) return json({ error: 'No staff account found for that user' }, 404);
 
-    const { data: target, error: targetError } = await admin.auth.getUserById(staffUserId);
+    const { data: target, error: targetError } = await admin.auth.admin.getUserById(staffUserId);
     if (targetError || !target.user?.email) {
       return json({ error: 'That staff member has no login account yet (invite pending).' }, 404);
     }
 
     // One-time magic-link token — the console redeems it with verifyOtp to
-    // open a normal session for this staff account.
-    const { data: link, error: linkError } = await admin.auth.generateLink({ type: 'magiclink', email: target.user.email });
-    if (linkError || !link?.properties?.token_hash) {
+    // open a normal session for this staff account. supabase-js returns the
+    // hash under `hashed_token`; the client passes it as `token_hash`.
+    const { data: link, error: linkError } = await admin.auth.admin.generateLink({ type: 'magiclink', email: target.user.email });
+    if (linkError || !link?.properties?.hashed_token) {
       return json({ error: linkError?.message ?? 'Could not create support session' }, 500);
     }
 
@@ -100,7 +101,7 @@ Deno.serve(async (req) => {
     });
 
     return json({
-      tokenHash: link.properties.token_hash,
+      tokenHash: link.properties.hashed_token,
       staffName: staff.name,
       staffRole: staff.role,
       practiceName: practiceName ?? '',
