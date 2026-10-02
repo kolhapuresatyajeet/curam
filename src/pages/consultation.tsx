@@ -7,11 +7,31 @@ import { consultationStore, useConsultationStore } from '@/stores/consultationSt
 import { appStore, useAppState, useSessionStaff } from '@/stores/appStore';
 import type { Consultation, ConsultationTemplate } from '@/types/domain';
 
-const TEMPLATES: { id: ConsultationTemplate; label: string }[] = [
-  { id: 'gp_consult', label: 'GP consult' },
-  { id: 'phone_triage', label: 'Phone triage' },
-  { id: 'nurse_clinic', label: 'Nurse clinic' },
-  { id: 'home_visit', label: 'Home visit' },
+const TEMPLATES: { id: ConsultationTemplate; label: string; hint: string; placeholders: Record<'subjective' | 'objective' | 'assessment' | 'plan', string> }[] = [
+  {
+    id: 'gp_consult',
+    label: 'GP consult',
+    hint: 'Standard face-to-face GP consultation in surgery.',
+    placeholders: { subjective: 'Presenting complaint, history…', objective: 'Examination findings, vitals…', assessment: 'Diagnosis / differential…', plan: 'Management, prescriptions, follow-up…' },
+  },
+  {
+    id: 'phone_triage',
+    label: 'Phone triage',
+    hint: 'Telephone triage — no examination possible. Record advice and safety-netting.',
+    placeholders: { subjective: 'History taken over the phone…', objective: 'No examination (remote consult).', assessment: 'Triage impression / category…', plan: 'Advice given, safety-netting, when to call back or attend…' },
+  },
+  {
+    id: 'nurse_clinic',
+    label: 'Nurse clinic',
+    hint: 'Nurse-led clinic — observations, injections, wound care.',
+    placeholders: { subjective: 'Reason for nurse appointment…', objective: 'Observations (BP, HR, SpO2), wound state…', assessment: 'Nurse assessment…', plan: 'Treatment given, next nurse appointment…' },
+  },
+  {
+    id: 'home_visit',
+    label: 'Home visit',
+    hint: 'Out-of-surgery visit — note home conditions and community follow-up.',
+    placeholders: { subjective: 'History at home visit…', objective: 'Findings in the home environment…', assessment: 'Assessment…', plan: 'Arrangements, community follow-up…' },
+  },
 ];
 
 export default function ConsultationPage() {
@@ -31,6 +51,7 @@ export default function ConsultationPage() {
   const [budgetReached, setBudgetReached] = useState(false);
 
   const existing = useMemo(() => {
+    if (window.location.search.includes('new=1')) return undefined; // "New SOAP note" — start blank
     const match = window.location.search.match(/id=([^&]+)/);
     if (match) return state.consultations.find((item) => item.id === match[1]);
     return state.consultations.find((item) => item.patientId === params.id && item.status === 'draft');
@@ -90,10 +111,16 @@ export default function ConsultationPage() {
             </button>
           ))}
         </div>
+        <p className="mb-3 text-[11px] italic text-slate-500">{TEMPLATES.find((item) => item.id === note.templateType)?.hint}</p>
         <div className="surface space-y-3 rounded-xl p-4">
           {(['subjective', 'objective', 'assessment', 'plan'] as const).map((field) => (
             <Field key={field} label={field.toUpperCase()}>
-              <textarea className={`${inputClass} h-24 py-2`} value={note[field]} onChange={(e) => patch({ [field]: e.target.value })} />
+              <textarea
+                className={`${inputClass} h-24 py-2`}
+                value={note[field]}
+                placeholder={TEMPLATES.find((item) => item.id === note.templateType)?.placeholders[field]}
+                onChange={(e) => patch({ [field]: e.target.value })}
+              />
             </Field>
           ))}
           <div className="text-[11px] text-slate-500">ICPC-2: {note.icpc2Codes.join(', ') || '—'}</div>
@@ -180,7 +207,8 @@ export default function ConsultationPage() {
           onClick={async () => {
             setScribeError('');
             setStructuring(true);
-            appStore.saveConsultation({ ...note, aiScribeUsed: true });
+            // Note: nothing is persisted yet — the AI draft stays local until
+            // the GP explicitly saves or signs the note.
             const remote = await structureSoapRemote({
               patientId: patient.id,
               transcript: audioBlob ? undefined : note.aiTranscript,

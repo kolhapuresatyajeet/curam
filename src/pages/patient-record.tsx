@@ -92,24 +92,9 @@ export default function PatientRecordPage() {
             size="sm"
             variant="primary"
             onClick={() => {
-              if (!staff) return;
-              const note = {
-                id: id('con'),
-                patientId: patient.id,
-                staffId: staff.id,
-                templateType: 'gp_consult' as ConsultationTemplate,
-                subjective: '',
-                objective: '',
-                assessment: '',
-                plan: '',
-                icpc2Codes: [],
-                aiScribeUsed: false,
-                aiTranscript: '',
-                status: 'draft' as const,
-                createdAt: nowIso(),
-              };
-              appStore.saveConsultation(note);
-              setLocation(`/patients/${patient.id}/consultation?id=${note.id}`);
+              // Nothing is saved yet — the note is only written to the record
+              // when the GP explicitly saves a draft or signs it.
+              setLocation(`/patients/${patient.id}/consultation?new=1`);
             }}
           >
             New SOAP note
