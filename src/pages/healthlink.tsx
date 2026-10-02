@@ -16,6 +16,7 @@ export default function HealthLinkPage() {
     if (search && !hay.includes(search.toLowerCase())) return false;
     if (tab === 'Abnormal') return row.abnormalFlags.length > 0;
     if (tab === 'Awaiting review') return !row.gpReviewed;
+    if (tab === 'Software') return false;
     return true;
   });
 
@@ -27,7 +28,13 @@ export default function HealthLinkPage() {
         description="Lab results, discharges and referral acks parsed from HL7 and filed to the patient record."
         action={<AppButton size="sm" icon={RefreshCw} onClick={() => window.location.reload()}>Sync now</AppButton>}
       />
-    <Tabs items={['All', 'Abnormal', 'Awaiting review']} value={tab} onChange={setTab} />
+    <Tabs items={['All', 'Abnormal', 'Awaiting review', 'Software']} value={tab} onChange={setTab} />
+      {tab === 'Software' ? (
+        <div className="max-w-2xl">
+          <BridgeDownload />
+        </div>
+      ) : (
+        <>
     <input className="mb-3 h-9 max-w-sm rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search patient or result…" />
       <TableShell>
         <thead>
@@ -79,8 +86,20 @@ export default function HealthLinkPage() {
           Referral ack {r.healthlinkRef} · {r.hospital}
         </p>
       ))}
-      <BridgeDownload />
-      {!rows.length && <EmptyState title="No matching HealthLink items" detail="The bridge agent pushes ORU/ADT/REF messages here." />}
+      {!rows.length && (
+        <EmptyState title="No matching HealthLink items" detail="The bridge agent pushes ORU/ADT/REF messages here." />
+      )}
+      {!state.labResults.length && (
+        <p className="mt-2 text-[11px] text-slate-500">
+          Expecting results but seeing none? The practice PC needs the bridge agent —{' '}
+          <button type="button" className="text-teal-700 underline" onClick={() => setTab('Software')}>
+            get it under Software
+          </button>
+          .
+        </p>
+      )}
+        </>
+      )}
     </div>
   );
 }
