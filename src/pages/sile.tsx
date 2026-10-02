@@ -1,72 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AppButton, Badge, Field, MetricCard, SectionTitle, Tabs, inputClass } from '@/components/shared/ui';
 import { detectEmergency, emergencyScript, sileVoiceTools } from '@/lib/sile';
-import { fetchLiveSileAudio, fetchLiveSileCalls, type LiveSileCall } from '@/lib/sileCalls';
-import { getSupabaseConfig, supabaseConfigured } from '@/lib/supabase';
+import { getSupabaseConfig } from '@/lib/supabase';
 import { formatIrishDateTime } from '@/lib/utils';
-import { AudioLines, Phone, Sparkles } from 'lucide-react';
+import { Phone, Sparkles } from 'lucide-react';
 import { appStore, useAppState } from '@/stores/appStore';
 import { patientName } from '@/types/domain';
-
-/** One live ElevenLabs call row: transcript inline + in-page audio player. */
-function LiveCallRow({ call }: { call: LiveSileCall }) {
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [audioError, setAudioError] = useState(false);
-
-  useEffect(() => {
-    let revoke: string | null = null;
-    void fetchLiveSileAudio(call.id).then((url) => {
-      if (url) {
-        revoke = url;
-        setAudioUrl(url);
-      } else {
-        setAudioError(true);
-      }
-    });
-    return () => {
-      if (revoke) URL.revokeObjectURL(revoke);
-    };
-  }, [call.id]);
-
-  return (
-    <div className="px-4 py-3">
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold">{call.agentName}</span>
-        <Badge tone={call.success ? 'teal' : 'amber'}>{call.success ? 'completed' : 'failed'}</Badge>
-        <span className="ml-auto text-[10px] text-slate-400">
-          {formatIrishDateTime(new Date(call.startTime).toISOString())} · {call.durationSeconds}s
-        </span>
-      </div>
-      {call.transcript && (
-        <p className="mt-1 whitespace-pre-line text-[11px] italic text-slate-500">“{call.transcript}”</p>
-      )}
-      {audioUrl && <audio controls src={audioUrl} className="mt-2 h-8 w-full max-w-md" />}
-      {audioError && <p className="mt-1 text-[10px] text-slate-400">Recording unavailable for this call.</p>}
-    </div>
-  );
-}
 
 export default function SilePage() {
   const state = useAppState();
   const [tab, setTab] = useState('Dashboard');
   const [transcript, setTranscript] = useState('');
   const [purpose, setPurpose] = useState<'booking' | 'results' | 'cdm_recall' | 'payment' | 'other'>('booking');
-  const [liveCalls, setLiveCalls] = useState<LiveSileCall[]>([]);
-  const [liveError, setLiveError] = useState('');
-  const [liveLoading, setLiveLoading] = useState(false);
-
-  // Load call recordings + transcripts from the voice platform (via the
-  // sile-elevenlabs proxy — the API key never reaches the browser, and the
-  // page contains no outbound links to the platform).
-  useEffect(() => {
-    if (!supabaseConfigured || tab !== 'Call log') return;
-    setLiveLoading(true);
-    setLiveError('');
-    fetchLiveSileCalls()
-      .then(setLiveCalls)
-      .catch(() => setLiveError('Could not load call recordings. Check that ELEVENLABS_API_KEY is configured.'))
-      .finally(() => setLiveLoading(false));
-  }, [tab]);
 
   return (
     <div className="fade-in">
@@ -81,39 +26,21 @@ export default function SilePage() {
         </div>
       )}
       {tab === 'Call log' && (
-        <div className="space-y-4">
-          {liveLoading && <div className="surface rounded-xl px-4 py-3 text-xs text-slate-500">Loading call recordings…</div>}
-          {liveError && <div className="surface rounded-xl px-4 py-3 text-xs text-red-600">{liveError}</div>}
-          {liveCalls.length > 0 && (
-            <div className="surface divide-y rounded-xl">
-              <div className="flex items-center gap-2 px-4 py-2 text-[11px] font-semibold text-slate-500">
-                <AudioLines size={13} /> Call recordings &amp; transcripts
-              </div>
-              {liveCalls.map((call) => (
-                <LiveCallRow key={call.id} call={call} />
-              ))}
-            </div>
-          )}
-          <div className="surface divide-y rounded-xl">
-            <div className="px-4 py-2 text-[11px] font-semibold text-slate-500">Logged calls</div>
-            {state.sileCalls.map((call) => {
-              const patient = state.patients.find((p) => p.id === call.patientId);
-              return (
-                <div key={call.id} className="px-4 py-3">
-                  <div className="flex gap-2">
-                    <span className="text-xs font-semibold">{patient ? patientName(patient) : 'Unknown'} · {call.purpose}</span>
-                    <Badge tone={call.direction === 'inbound' ? 'blue' : 'teal'}>{call.direction}</Badge>
-                  </div>
-                  <p className="text-[11px] text-slate-500">{call.outcome}</p>
-                  <p className="text-[10px] text-slate-400">{formatIrishDateTime(call.createdAt)} · {call.durationSeconds}s</p>
-                  <p className="mt-1 text-[11px] italic text-slate-500">“{call.transcript}”</p>
+        <div className="surface divide-y rounded-xl">
+          {state.sileCalls.map((call) => {
+            const patient = state.patients.find((p) => p.id === call.patientId);
+            return (
+              <div key={call.id} className="px-4 py-3">
+                <div className="flex gap-2">
+                  <span className="text-xs font-semibold">{patient ? patientName(patient) : 'Unknown'} · {call.purpose}</span>
+                  <Badge tone={call.direction === 'inbound' ? 'blue' : 'teal'}>{call.direction}</Badge>
                 </div>
-              );
-            })}
-            {state.sileCalls.length === 0 && !liveLoading && liveCalls.length === 0 && (
-              <p className="px-4 py-3 text-xs text-slate-400">No calls logged yet.</p>
-            )}
-          </div>
+                <p className="text-[11px] text-slate-500">{call.outcome}</p>
+                <p className="text-[10px] text-slate-400">{formatIrishDateTime(call.createdAt)} · {call.durationSeconds}s</p>
+                <p className="mt-1 text-[11px] italic text-slate-500">“{call.transcript}”</p>
+              </div>
+            );
+          })}
         </div>
       )}
       {tab === 'Voice API' && (
