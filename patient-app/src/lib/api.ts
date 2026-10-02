@@ -277,3 +277,28 @@ export async function addReading(input: {
   });
   if (error) throw new Error(error.message);
 }
+
+// GDPR Art. 15/20: fetch the patient's complete record as a JSON file and
+// open the platform share sheet so it can be saved or emailed. Uses the
+// patient's own session token — the Edge Function is RLS-scoped to the
+// caller, so a patient can only ever receive their own data.
+export async function downloadMyData(): Promise<void> {
+  const { supabaseUrl } = await import('./supabase');
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token;
+  if (!token) throw new Error('Sign in first');
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/patient-data-export`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);
+  const json = await res.text();
+
+  const FileSystem = await import('expo-file-system');
+  const Sharing = await import('expo-sharing');
+  const name = `mycuram-data-${new Date().toISOString().slice(0, 10)}.json`;
+  const fileUri = `${(FileSystem as { documentDirectory: string | null }).documentDirectory}${name}`;
+  await FileSystem.writeAsStringAsync(fileUri, json, { encoding: FileSystem.EncodingType.UTF8 });
+  if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing not available on this device');
+  await Sharing.shareAsync(fileUri, { mimeType: 'application/json', dialogTitle: 'My Cúram data export' });
+}

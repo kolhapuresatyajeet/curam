@@ -12,6 +12,7 @@ import { supabase, supabaseConfigured } from '@/lib/supabase';
 import { patientName } from '@/types/domain';
 import { useFeatureFlag } from '@/lib/featureFlags';
 import { canManagePractice, canUseHealthmail } from '@/lib/roles';
+import { exportPatientsCsv, exportPracticeData } from '@/lib/export';
 
 export default function SettingsPage() {
   const state = useAppState();
@@ -23,6 +24,7 @@ export default function SettingsPage() {
   const [eraseStatus, setEraseStatus] = useState<{ canErase: boolean; reason: string } | null>(null);
   const [eraseChecking, setEraseChecking] = useState(false);
   const [googleError, setGoogleError] = useState('');
+  const [exportStatus, setExportStatus] = useState('');
   const [sileChat, setSileChat] = useFeatureFlag('sileChat');
   const me = state.staff.find((member) => member.id === auth.staff?.id) ?? auth.staff ?? state.staff.find((member) => member.id === state.session?.staffId);
   const googleFlag = new URLSearchParams(window.location.search).get('google');
@@ -275,22 +277,40 @@ export default function SettingsPage() {
             </p>
           </div>
 
-          <div>
-            <AppButton
-              size="sm"
-              onClick={() => {
-                const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'curam-gdpr-export.json';
-                a.click();
-              }}
-            >
-              Export workspace (JSON)
-            </AppButton>
-            <p className="mt-1 text-[11px] text-slate-400">
-              Patients export their own data from MyCúram (or via the patient-data-export endpoint).
+          <div className="surface rounded-xl p-4 text-xs text-slate-600">
+            <p className="font-semibold text-slate-800">Data export (GDPR Art. 15/20 · SAR support)</p>
+            <p className="mt-2">
+              Download the practice's full dataset, or one patient's complete record (e.g. for a Subject
+              Access Request — respond within one month). Every export is recorded in the audit log.
+              GP and practice manager only.
+            </p>
+            {canManagePractice(me?.role) ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <AppButton
+                  size="sm"
+                  variant="primary"
+                  onClick={() => {
+                    void exportPracticeData().then((result) => setExportStatus(result.ok ? `Export downloaded (${result.filename}).` : result.error));
+                  }}
+                >
+                  Export practice data (JSON)
+                </AppButton>
+                <AppButton
+                  size="sm"
+                  onClick={() => {
+                    void exportPatientsCsv().then((result) => setExportStatus(result.ok ? `Export downloaded (${result.filename}).` : result.error));
+                  }}
+                >
+                  Export patients (CSV)
+                </AppButton>
+                {exportStatus && <span className="text-teal-700">{exportStatus}</span>}
+              </div>
+            ) : (
+              <p className="mt-2 text-slate-500">Data exports are restricted to the GP and practice manager.</p>
+            )}
+            <p className="mt-2 text-[11px] text-slate-400">
+              Patients export their own data from MyCúram → Profile → Download my data. Notes created
+              before database sync may be missing from server exports — check the original device.
             </p>
           </div>
           {canManagePractice(me?.role) && (

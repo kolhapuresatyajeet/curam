@@ -25,3 +25,5 @@ export const supabase = createClient(
     },
   },
 );
+
+export const supabaseUrl = extra.supabaseUrl ?? '';

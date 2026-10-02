@@ -4,6 +4,8 @@ import { AppButton, Avatar, Badge, EmptyState, Field, Tabs, inputClass } from '@
 import { ageFromDob, formatIrishDate, formatIrishPhone, id, nowIso } from '@/lib/utils';
 import { appStore, useAppState, useSessionStaff } from '@/stores/appStore';
 import { templateLabel } from '@/lib/consultation-templates';
+import { canManagePractice } from '@/lib/roles';
+import { exportPatientRecord } from '@/lib/export';
 import { patientName, type ConsultationTemplate } from '@/types/domain';
 
 const TABS = ['Summary', 'Timeline', 'Consultation', 'Prescriptions', 'Results', 'Referrals', 'CDM', 'Vaccines', 'Documents'];
@@ -16,6 +18,7 @@ export default function PatientRecordPage() {
   const patient = state.patients.find((item) => item.id === params.id);
   const [tab, setTab] = useState('Summary');
   const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
+  const [exportStatus, setExportStatus] = useState('');
 
   if (!patient) return <EmptyState title="Patient not found" detail="This record is not on the practice panel." />;
 
@@ -89,17 +92,32 @@ export default function PatientRecordPage() {
 
       {tab === 'Consultation' && (
         <div className="space-y-3">
-          <AppButton
-            size="sm"
-            variant="primary"
-            onClick={() => {
-              // Nothing is saved yet — the note is only written to the record
-              // when the GP explicitly saves a draft or signs it.
-              setLocation(`/patients/${patient.id}/consultation?new=1`);
-            }}
-          >
-            New SOAP note
-          </AppButton>
+          <div className="flex flex-wrap items-center gap-2">
+            <AppButton
+              size="sm"
+              variant="primary"
+              onClick={() => {
+                // Nothing is saved yet — the note is only written to the record
+                // when the GP explicitly saves a draft or signs it.
+                setLocation(`/patients/${patient.id}/consultation?new=1`);
+              }}
+            >
+              New SOAP note
+            </AppButton>
+            {canManagePractice(staff?.role) && (
+              <>
+                <AppButton
+                  size="sm"
+                  onClick={() => {
+                    void exportPatientRecord(patient.id).then((result) => setExportStatus(result.ok ? `Record downloaded (${result.filename}).` : result.error));
+                  }}
+                >
+                  Download record (JSON)
+                </AppButton>
+                {exportStatus && <span className="text-[11px] text-teal-700">{exportStatus}</span>}
+              </>
+            )}
+          </div>
           {notes.map((note) => {
             const expanded = expandedNoteId === note.id;
             return (
