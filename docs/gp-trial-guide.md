@@ -94,23 +94,27 @@ integration testing (endpoint provisioning, build-plan month 16) it runs
 harmlessly: registration, heartbeats, and the full message pipeline minus
 the HealthLink wire itself.
 
-```bash
-cd bridge-agent
-npm install
-npm run build
-npm start          # tray app — green dot when registered
-```
-
-1. Get the bootstrap key: Supabase secret `BRIDGE_API_KEY`.
-2. First run: the agent registers against the practice and receives its own
+1. On the practice PC, open the **HealthLink** page in the staff web app →
+   **Download for Windows/Mac** (platform-detected; installers are hosted on
+   the public `curam-releases` GitHub repo — nothing to clone, no Node).
+2. Install (Windows: one-click Setup exe, runs after install; macOS: open
+   the dmg). The app lives in the **system tray** with a status dot and
+   starts with the OS.
+3. Get the bootstrap key: Supabase secret `BRIDGE_API_KEY`.
+4. First run: the agent registers against the practice and receives its own
    per-agent key (saved to `%APPDATA%/curam-bridge/config.json`).
-3. Confirm in the **Staff web → HealthLink page** that the agent shows as
+5. Confirm in the **HealthLink page** that the agent shows as
    registered/heartbeating.
-4. **Simulate the pipeline** (from any machine, using the agent key):
+6. **Simulate the pipeline** (from any machine, using the agent key):
    - inbound lab result (ORU) → lands in **HealthLink** page + urgent inbox;
      abnormal flags force **GP callback** delivery — never AI;
    - referral round-trip: queue in Cúram → outbox → ack → `acked`.
    Full curl commands: `docs/testing.md` §3.
+
+To release a new bridge version: bump the version in
+`bridge-agent/package.json`, run `npm run dist:win` / `dist:mac`, upload the
+installers to a new release in `curam-releases`, and bump `BRIDGE_VERSION`
+in `src/pages/healthlink.tsx`.
 
 ## 7. Patient app — MyCúram on a phone (10 min)
 

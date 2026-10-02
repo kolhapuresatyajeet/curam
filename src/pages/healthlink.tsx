@@ -79,7 +79,45 @@ export default function HealthLinkPage() {
           Referral ack {r.healthlinkRef} · {r.hospital}
         </p>
       ))}
+      <BridgeDownload />
       {!rows.length && <EmptyState title="No matching HealthLink items" detail="The bridge agent pushes ORU/ADT/REF messages here." />}
+    </div>
+  );
+}
+
+/** Installers hosted on the public curam-releases GitHub repo (no auth needed on the practice PC). */
+const BRIDGE_VERSION = '0.1.0';
+const BRIDGE_DOWNLOADS = {
+  mac: `https://github.com/kolhapuresatyajeet/curam-releases/releases/latest/download/curam-bridge-${BRIDGE_VERSION}-mac.dmg`,
+  windows: `https://github.com/kolhapuresatyajeet/curam-releases/releases/latest/download/curam-bridge-${BRIDGE_VERSION}-win-setup.exe`,
+};
+
+function BridgeDownload() {
+  const ua = navigator.userAgent;
+  const isWindows = /Win/i.test(ua);
+  const isMac = /Mac/i.test(ua);
+  const primary = isWindows ? BRIDGE_DOWNLOADS.windows : isMac ? BRIDGE_DOWNLOADS.mac : null;
+  const other = isWindows ? BRIDGE_DOWNLOADS.mac : BRIDGE_DOWNLOADS.windows;
+
+  return (
+    <div className="surface mt-4 flex flex-wrap items-center gap-3 rounded-xl p-4">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold">Cúram HealthLink Bridge · v{BRIDGE_VERSION}</p>
+        <p className="mt-0.5 text-[11px] text-slate-500">
+          Desktop agent for the practice PC or Mac — polls HealthLink, files results here, sends queued eReferrals.
+          Runs in the tray and starts with the OS.
+        </p>
+      </div>
+      {primary && (
+        <a href={primary} download>
+          <AppButton size="sm" variant="primary">
+            Download for {isWindows ? 'Windows' : 'Mac'}
+          </AppButton>
+        </a>
+      )}
+      <a href={other} download className="text-[11px] text-teal-700 underline">
+        {isWindows ? 'Download for Mac instead' : 'Download for Windows instead'}
+      </a>
     </div>
   );
 }

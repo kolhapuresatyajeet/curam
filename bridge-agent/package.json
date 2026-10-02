@@ -25,7 +25,7 @@
     "appId": "ie.curam.healthlink.bridge",
     "files": ["dist/**/*", "package.json"],
     "win": { "target": "nsis" },
-    "nsis": { "oneClick": true, "autoStartOnLaunch": true },
+    "nsis": { "oneClick": true, "runAfterFinish": true },
     "mac": {
       "target": "dmg",
       "category": "public.app-category.medical"
