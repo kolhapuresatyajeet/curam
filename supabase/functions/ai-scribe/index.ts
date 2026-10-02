@@ -121,7 +121,8 @@ async function structureSoap(transcript: string, context: string): Promise<{ dra
   const system = `You are a medical scribe for an Irish GP. Convert the consultation transcript into a structured SOAP note.
 Use only what is in the transcript and context. Never invent findings. Write in concise clinical English (Irish conventions: 999/112 for emergencies, dd/MM/yyyy dates).
 Also suggest 0-3 ICPC-2 codes (format "CODE Label") that match the assessment.
-Respond with JSON only: {"subjective": string, "objective": string, "assessment": string, "plan": string, "icpc2": string[]}`;
+Also write "summary": a 2-3 sentence plain-English summary of this consultation for the patient record (what brought the patient in, key findings, and the plan). Base it strictly on the transcript.
+Respond with JSON only: {"subjective": string, "objective": string, "assessment": string, "plan": string, "icpc2": string[], "summary": string}`;
 
   // Anthropic /v1/messages format — natively proxied by LiteLLM (same body,
   // cache_control included), and the direct API when no gateway is configured.
@@ -161,6 +162,7 @@ Respond with JSON only: {"subjective": string, "objective": string, "assessment"
         plan: parsed.plan ?? '',
       },
       codes: Array.isArray(parsed.icpc2) ? parsed.icpc2.slice(0, 3).map(String) : [],
+      summary: typeof parsed.summary === 'string' ? parsed.summary : '',
       inputTokens: body.usage?.input_tokens ?? 0,
       outputTokens: body.usage?.output_tokens ?? 0,
     };
@@ -285,5 +287,5 @@ Deno.serve(async (req) => {
     /* metering must not break the scribe */
   }
 
-  return json({ transcript, draft: structured.draft, codes: structured.codes ?? [] });
+  return json({ transcript, draft: structured.draft, codes: structured.codes ?? [], summary: structured.summary ?? '' });
 });

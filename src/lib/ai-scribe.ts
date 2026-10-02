@@ -27,10 +27,19 @@ export function draftSoapFromTranscript(transcript: string, context: string) {
   };
 }
 
+/** Local fallback summary when AI is unavailable — first sentences of the transcript. */
+export function draftSummaryFromTranscript(transcript: string): string {
+  const clean = transcript.replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  const sentences = clean.match(/[^.!?]+[.!?]/g) ?? [clean];
+  return sentences.slice(0, 2).join(' ').slice(0, 300) || clean.slice(0, 300);
+}
+
 export type ScribeResult = {
   transcript: string;
   draft: { subjective: string; objective: string; assessment: string; plan: string };
   codes: string[];
+  summary: string;
 };
 
 /** Calls the ai-scribe Edge Function with a recording and/or transcript. Returns null on failure. */
@@ -72,6 +81,7 @@ export async function structureSoapRemote(input: {
       transcript: body.transcript ?? input.transcript ?? '',
       draft: body.draft,
       codes: Array.isArray(body.codes) ? body.codes.map(String) : [],
+      summary: typeof body.summary === 'string' ? body.summary : '',
     },
   };
 }

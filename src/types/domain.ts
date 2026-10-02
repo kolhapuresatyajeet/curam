@@ -153,6 +153,8 @@ export interface Consultation {
   icpc2Codes: string[];
   aiScribeUsed: boolean;
   aiTranscript: string;
+  /** 2–3 sentence clinical summary of the consultation, drafted by Síle (GP-approved). */
+  aiSummary?: string;
   aiDraftNote?: Partial<Pick<Consultation, 'subjective' | 'objective' | 'assessment' | 'plan'>>;
   status: ConsultationStatus;
   signedAt?: string;

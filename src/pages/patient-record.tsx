@@ -117,7 +117,13 @@ export default function PatientRecordPage() {
             <div key={note.id} className="surface rounded-xl p-4">
               <div className="text-[11px] text-slate-400">
                 {formatIrishDate(note.createdAt)} · {note.templateType} · {note.status}
+                {note.aiScribeUsed && ' · Síle scribe'}
               </div>
+              {note.aiSummary && note.status === 'signed' && (
+                <p className="mt-2 rounded-lg bg-[#eef4f9] px-3 py-2 text-[11px] leading-5 text-slate-600">
+                  <span className="font-semibold text-slate-800">Summary: </span>{note.aiSummary}
+                </p>
+              )}
               <p className="mt-2 text-xs text-slate-600">{note.assessment || 'Draft'}</p>
             </div>
           ))}
