@@ -54,8 +54,51 @@ async function transcribeAudio(audio: ArrayBuffer, filename: string): Promise<{ 
     body: form,
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) return { error: body.error?.message ?? `Transcription failed (HTTP ${response.status})` };
-  return { transcript: body.text ?? '' };
+  if (response.ok) return { transcript: body.text ?? '' };
+
+  // Gateways that only proxy chat models reject /audio/transcriptions with an
+  // invalid-model error — fall back to an audio-capable chat model instead
+  // (e.g. Gemini) so voice capture still works on text-only gateway keys.
+  const message = body.error?.message ?? '';
+  if (/invalid model name|model.*not (found|allowed)|not a valid model/i.test(message)) {
+    return transcribeViaChatModel(audio, filename);
+  }
+  return { error: message || `Transcription failed (HTTP ${response.status})` };
+}
+
+// Transcription via chat completions: audio attached as an input_audio part
+// (OpenAI multimodal format, translated by LiteLLM to Gemini inline audio).
+async function transcribeViaChatModel(audio: ArrayBuffer, filename: string): Promise<{ transcript?: string; error?: string }> {
+  const model = Deno.env.get('AI_TRANSCRIBE_CHAT_MODEL') ?? 'gemini-3.8-flash';
+  const ext = filename.split('.').pop()?.toLowerCase() ?? 'wav';
+  const format = ['wav', 'mp3', 'webm', 'ogg', 'm4a'].includes(ext) ? ext : 'wav';
+  const bytes = new Uint8Array(audio);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  const base64 = btoa(binary);
+  const endpoint = LITELLM_BASE ? `${LITELLM_BASE}/v1/chat/completions` : 'https://api.openai.com/v1/chat/completions';
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { ...gatewayAuthHeaders(), ...(LITELLM_BASE ? {} : { Authorization: `Bearer ${Deno.env.get('OPENAI_API_KEY') ?? ''}` }), 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Transcribe this audio verbatim. It is a GP consultation in English (Irish accent). Output only the transcript text, no commentary.' },
+          { type: 'input_audio', input_audio: { data: base64, format } },
+        ],
+      }],
+    }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) return { error: body.error?.message ?? `Chat-model transcription failed (HTTP ${response.status})` };
+  const text = (body.choices?.[0]?.message?.content ?? '').trim();
+  return text ? { transcript: text } : { error: 'Transcription came back empty' };
 }
 
 function patientContextBlock(patient: any, conditions: any[], medications: string[]): string {
