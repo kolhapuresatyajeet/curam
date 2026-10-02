@@ -4,6 +4,7 @@ import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { canAccess } from '@/lib/permissions';
 import { supabaseConfigured } from '@/lib/supabase';
+import { supportSessionInfo, clearSupportSession, type SupportSessionInfo } from '@/lib/support';
 import { appStore, useAppState, useSessionStaff } from '@/stores/appStore';
 import { signOut, useSupabaseAuth } from '@/stores/authSession';
 import type { ModuleId } from '@/types/domain';
@@ -49,6 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const auth = useSupabaseAuth();
   const [location, setLocation] = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [supportInfo] = useState<SupportSessionInfo | null>(() => supportSessionInfo());
 
   useEffect(() => {
     const timer = window.setInterval(() => appStore.touchSession(), 60_000);
@@ -93,6 +95,22 @@ export function AppShell({ children }: { children: ReactNode }) {
         }}
       />
       <main className="main-grid min-w-0 flex-1">
+        {supportInfo && (
+          <div className="flex items-center justify-between gap-3 bg-amber-400 px-4 py-1.5 text-[11px] font-medium text-amber-950">
+            <span>
+              Support session — signed in as {supportInfo.staffName} ({supportInfo.staffRole}) at {supportInfo.practiceName || 'practice'}. Every action here is audited.
+            </span>
+            <button
+              className="rounded border border-amber-700/40 px-2 py-0.5 text-[10px] font-semibold hover:bg-amber-300"
+              onClick={() => {
+                clearSupportSession();
+                void signOut().then(() => setLocation('/support'));
+              }}
+            >
+              End support session
+            </button>
+          </div>
+        )}
         <Header
           active={active}
           staff={staff}
