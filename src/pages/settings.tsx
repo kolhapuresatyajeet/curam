@@ -11,6 +11,7 @@ import { appStore, useAppState } from '@/stores/appStore';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
 import { patientName } from '@/types/domain';
 import { useFeatureFlag } from '@/lib/featureFlags';
+import { canManagePractice, canUseHealthmail } from '@/lib/roles';
 
 export default function SettingsPage() {
   const state = useAppState();
@@ -36,6 +37,7 @@ export default function SettingsPage() {
       <SectionTitle title="Settings" description="Practice, integrations, security and GDPR." />
       <Tabs items={['Practice', 'Integrations', 'Security & GDPR', 'Audit log']} value={tab} onChange={setTab} />
       {tab === 'Practice' && (
+        canManagePractice(me?.role) ? (
         <form
           className="surface max-w-lg space-y-3 rounded-xl p-4"
           onSubmit={(e) => {
@@ -47,26 +49,54 @@ export default function SettingsPage() {
           <p className="text-[11px] text-slate-500">{state.practice.address} · {state.practice.eircode} · PCRS {state.practice.pcrsReg}</p>
           <AppButton type="submit" size="sm" variant="primary">Save</AppButton>
         </form>
+        ) : (
+          <div className="surface max-w-lg space-y-3 rounded-xl p-4">
+            <p className="text-[12px] text-slate-600">
+              Practice details are managed by the practice's GP or practice manager.
+            </p>
+            <p className="text-[11px] text-slate-500">{state.practice.name} · {state.practice.address} · {state.practice.eircode}</p>
+          </div>
+        )
       )}
       {tab === 'Integrations' && (
         <div className="space-y-4">
           <div className="surface max-w-lg space-y-3 rounded-xl p-4">
             <div className="text-sm font-semibold">Healthmail — secure clinical email (optional)</div>
-            <p className="text-[12px] text-slate-600">
-              Connect your own @healthmail.ie account to send prescriptions to pharmacies directly from Cúram. Your password is stored
-              encrypted in the Supabase Vault and is never visible to other staff.
-            </p>
-            <HealthmailForm />
+            {canUseHealthmail(me?.role) ? (
+              <>
+                <p className="text-[12px] text-slate-600">
+                  Connect your own @healthmail.ie account to send prescriptions to pharmacies directly from Cúram. Your password is stored
+                  encrypted in the Supabase Vault and is never visible to other staff.
+                </p>
+                <HealthmailForm />
+              </>
+            ) : (
+              <p className="text-[12px] text-slate-600">
+                Prescribing staff (GPs and nurses) connect their own @healthmail.ie address here. Ask your GP or practice manager about
+                the practice's Healthmail account.
+              </p>
+            )}
           </div>
           <div className="surface max-w-lg space-y-3 rounded-xl p-4">
-            <div className="text-sm font-semibold">Stripe — online payments (optional)</div>
-            <p className="text-[12px] text-slate-600">
-              Optional — skip this if the practice takes cash or card payments in-room only; those are recorded directly in Billing.
-              To take payments online, connect the practice's own Stripe account: you'll be taken to Stripe's secure setup
-              (business details, IBAN, payouts) and returned here. Cúram never sees your Stripe credentials, and payments go
-              straight to the practice's account.
-            </p>
-            <StripeConnectCard />
+            <div className="text-sm font-semibold">Stripe — online payments (optional · practice-wide)</div>
+            {canManagePractice(me?.role) ? (
+              <>
+                <p className="text-[12px] text-slate-600">
+                  Practice-level setting — one Stripe account for the whole practice, connected once by the GP or practice manager.
+                  Skip this if the practice takes cash or card payments in-room only; those are recorded directly in Billing.
+                  You'll be taken to Stripe's secure setup (business details, IBAN, payouts) and returned here. Cúram never sees your
+                  Stripe credentials, and payments go straight to the practice's account.
+                </p>
+                <StripeConnectCard />
+              </>
+            ) : (
+              <p className="text-[12px] text-slate-600">
+                Only the practice's GP or practice manager can connect Stripe.{' '}
+                {state.practice.stripeAccountId
+                  ? 'The practice already has a Stripe account connected.'
+                  : 'No Stripe account is connected yet for the practice.'}
+              </p>
+            )}
           </div>
           <div className="surface max-w-lg space-y-3 rounded-xl p-4">
             <div className="text-sm font-semibold">Síle AI — chat (beta)</div>
@@ -77,9 +107,12 @@ export default function SettingsPage() {
               The scribe and briefing stay on regardless of this switch.
             </p>
             <label className="flex items-center gap-2 text-xs text-slate-700">
-              <input type="checkbox" checked={sileChat} onChange={(e) => setSileChat(e.target.checked)} />
+              <input type="checkbox" checked={sileChat} disabled={!canManagePractice(me?.role)} onChange={(e) => setSileChat(e.target.checked)} />
               Enable Chat with Síle
             </label>
+            {!canManagePractice(me?.role) && (
+              <p className="text-[11px] text-slate-400">This setting affects the practice's AI spend — only the GP or practice manager can change it.</p>
+            )}
           </div>
           <div className="surface max-w-lg space-y-3 rounded-xl p-4">
             <div className="text-sm font-semibold">Google Calendar</div>
@@ -260,9 +293,11 @@ export default function SettingsPage() {
               Patients export their own data from MyCúram (or via the patient-data-export endpoint).
             </p>
           </div>
-          <AppButton size="sm" variant="ghost" onClick={() => appStore.resetDemo()}>
-            Reset demo data
-          </AppButton>
+          {canManagePractice(me?.role) && (
+            <AppButton size="sm" variant="ghost" onClick={() => appStore.resetDemo()}>
+              Reset demo data
+            </AppButton>
+          )}
         </div>
       )}
       {tab === 'Audit log' && (
