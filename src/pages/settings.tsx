@@ -10,6 +10,7 @@ import { ageFromDob } from '@/lib/utils';
 import { appStore, useAppState } from '@/stores/appStore';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
 import { patientName } from '@/types/domain';
+import { useFeatureFlag } from '@/lib/featureFlags';
 
 export default function SettingsPage() {
   const state = useAppState();
@@ -21,6 +22,7 @@ export default function SettingsPage() {
   const [eraseStatus, setEraseStatus] = useState<{ canErase: boolean; reason: string } | null>(null);
   const [eraseChecking, setEraseChecking] = useState(false);
   const [googleError, setGoogleError] = useState('');
+  const [sileChat, setSileChat] = useFeatureFlag('sileChat');
   const me = state.staff.find((member) => member.id === auth.staff?.id) ?? auth.staff ?? state.staff.find((member) => member.id === state.session?.staffId);
   const googleFlag = new URLSearchParams(window.location.search).get('google');
 
@@ -65,6 +67,19 @@ export default function SettingsPage() {
               straight to the practice's account.
             </p>
             <StripeConnectCard />
+          </div>
+          <div className="surface max-w-lg space-y-3 rounded-xl p-4">
+            <div className="text-sm font-semibold">Síle AI — chat (beta)</div>
+            <p className="text-[12px] text-slate-600">
+              Shows a “Chat with Síle” bubble in the bottom-right corner for staff. Read-only: Síle answers
+              questions using live practice data but never changes records. Each answer uses a small Claude
+              API call (~€2–8/month per GP at typical use) and is metered with a monthly cap on the server.
+              The scribe and briefing stay on regardless of this switch.
+            </p>
+            <label className="flex items-center gap-2 text-xs text-slate-700">
+              <input type="checkbox" checked={sileChat} onChange={(e) => setSileChat(e.target.checked)} />
+              Enable Chat with Síle
+            </label>
           </div>
           <div className="surface max-w-lg space-y-3 rounded-xl p-4">
             <div className="text-sm font-semibold">Google Calendar</div>

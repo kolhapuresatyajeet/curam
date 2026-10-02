@@ -29,11 +29,17 @@ import StaffPage from '@/pages/staff';
 import WaitingRoomPage from '@/pages/waiting-room';
 import WorkflowsPage from '@/pages/workflows';
 import { useAuthListener } from '@/stores/authSession';
+import SileChatWidget from '@/components/sile/SileChatWidget';
 
 const queryClient = new QueryClient();
 
 function Authed({ children }: { children: ReactNode }) {
-  return <AppShell>{children}</AppShell>;
+  return (
+    <AppShell>
+      {children}
+      <SileChatWidget />
+    </AppShell>
+  );
 }
 
 function Router() {

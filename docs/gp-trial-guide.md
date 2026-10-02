@@ -153,6 +153,17 @@ CDM pays per review, but **both signatures are mandatory**:
    receipt is printable, and a payment audit entry is written.
    For walk-in cash/card, use **Cash / in-room** instead.
 
+### 5.8 Chat with Síle (beta, optional)
+
+1. Click the teal **sparkle bubble** in the bottom-right corner (any page).
+2. Ask something, e.g. *"What's pending today?"* — Síle answers from a live
+   practice snapshot (today's schedule, results awaiting review, drafts)
+   plus the page you're on.
+3. **Expect**: an answer in seconds. Síle is read-only — it never changes
+   records, and every conversation is metered against the practice's monthly
+   AI cap (see **Settings → Síle AI — chat (beta)** to switch it off if
+   spend matters; the scribe and briefing stay on regardless).
+
 ## 6. HealthLink bridge — Electron agent on the practice PC (15 min)
 
 Runs where the HealthLink digital certificate lives. Until formal
