@@ -87,12 +87,12 @@ registered (we'll call them "the patient" below).
 2. Click **Check in** on the patient's row.
 3. **Expect**: they move to the waiting list, ready for the consult.
 
-### 5.3 The consultation — AI scribe
+### 5.3 The consultation — Síle scribe
 
 1. Open the **patient's record** (Patients → click the patient) → click
    **Start consultation**.
 2. Pick a **template** (GP consult, nurse review…) — the SOAP fields adapt.
-3. In the **AI scribe** panel on the right:
+3. In the **Síle scribe** panel on the right:
    - tick **Patient consent for recording** (required — consent is logged);
    - click **Start capture**, speak a sentence of clinical detail out loud
      (e.g. *"Patient is a 62-year-old with type 2 diabetes, HbA1c 8.2 on
@@ -223,7 +223,7 @@ HIQA/GDPR is the selling point — show it:
 | HealthLink wire format | Real endpoint at formal integration testing (month 16) — everything else is live |
 | Booking/reminder emails | Blocked until the Resend sending domain DNS is verified |
 | WhatsApp reminders | Needs approved Twilio Content Templates (number has no SMS capability) |
-| Síle voice calls end-to-end | Needs the voice platform account + phone number |
+| VoiceHub calls end-to-end | VoiceHub (sister app) makes patient phone calls; Síle surfaces its call insights in Cúram. Needs VoiceHub's voice platform account + phone number |
 | Automated insurer claims | Deliberately deferred ("coming soon" in UI) |
 
 ## After the trial — go-live checklist

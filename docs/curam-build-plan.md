@@ -27,7 +27,7 @@
 | **Healthmail** | Node.js with nodemailer (SMTP/IMAP) | Standard email integration. TLS connection to healthmail.ie mail servers. |
 | **Stripe** | Stripe SDK (stripe-js frontend + stripe Node.js backend) | Payments, payment links, Stripe Terminal for in-practice card payments. |
 | **AI Scribe** | Whisper API (speech-to-text) + Claude API (note structuring) | Ambient transcription → structured SOAP note. All processing within EU. |
-| **AI Voice (Síle)** | Vapi.ai or Bland.ai or Retell.ai | Voice AI platform for inbound/outbound calls. Connects to your API for appointment booking, results delivery. |
+| **AI Voice (VoiceHub — sister app)** | Vapi.ai or Bland.ai or Retell.ai | Voice AI platform for inbound/outbound patient calls. VoiceHub is a separate app that works closely with Cúram; it connects to your API for appointment booking and results delivery, and Síle surfaces its call insights in Cúram. |
 | **SMS** | Twilio or MessageBird | Appointment reminders, payment links, CDM recalls. Irish phone numbers. |
 | **Hosting** | Supabase Cloud (EU) + Vercel (frontend) or Cloudflare Pages | GDPR-compliant EU hosting. Supabase has Frankfurt region. |
 | **Mobile (patient app)** | React Native or Expo | Share component logic with web. iOS + Android for MyCúram patient app. |
@@ -93,7 +93,7 @@ You are building Cúram, an AI-first GP practice management platform for Irish g
 ## Tech stack
 - Frontend: React 18, TypeScript, Tailwind CSS, shadcn/ui components
 - Backend: Supabase (PostgreSQL, Edge Functions, Auth, Storage, Realtime)
-- Integrations: Stripe (payments), Nodemailer (Healthmail SMTP), Vapi.ai (voice AI)
+- Integrations: Stripe (payments), Nodemailer (Healthmail SMTP), Vapi.ai (voice AI — VoiceHub sister app)
 - AI: Whisper (transcription), Claude API (note structuring)
 - Deployment: Vercel (frontend), Supabase Cloud EU (backend)
 - Mobile: React Native / Expo (patient app — MyCúram)
@@ -134,7 +134,7 @@ You are building Cúram, an AI-first GP practice management platform for Irish g
 - Prescriptions require GP approval (never auto-approved)
 - CDM reviews require both nurse review AND GP review
 - GDPR: patient records retained 8 years (adults), until age 25 (children)
-- All Síle AI voice calls must be logged with recording and transcript
+- All VoiceHub voice calls (sister app) must be logged with recording and transcript; Síle surfaces them, never re-dials
 - Emergency detection: if patient mentions chest pain, breathing difficulty → instruct to call 999/112
 ```
 
@@ -326,7 +326,13 @@ Security: Healthmail credentials never leave the server. TLS required. All email
 
 ## Phase 3 — AI Features (Weeks 15-20)
 
-### Sprint 8-9: AI Scribe + Síle Voice (Weeks 15-18)
+### Sprint 8-9: AI Scribe + VoiceHub Voice (Weeks 15-18)
+
+> **Síle vs VoiceHub.** *Síle* is Cúram's own GP-facing AI assistant: the
+> consultation scribe, the dashboard briefing, drafts (referrals/letters) and
+> later chat — all human-approved. *VoiceHub* is the sister app that makes the
+> patient phone calls. VoiceHub calls are logged and Síle surfaces their
+> insights in Cúram, but Síle never dials patients itself.
 
 **Cursor prompt:**
 ```
@@ -342,7 +348,7 @@ AI SCRIBE:
 7. Auto-suggest ICPC-2 codes based on note content
 8. All AI processing must use EU-hosted endpoints
 
-SÍLE VOICE AGENT:
+SÍLE VOICE AGENT (via VoiceHub sister app — VoiceHub owns the calling):
 1. Integrate with Vapi.ai (or Retell.ai) for voice AI
 2. Inbound call handling: answer practice phone, identify patient by name+DOB, ask reason for call, perform triage screening (red flag questions), check real-time appointment availability, book appointment, send SMS confirmation
 3. Outbound result delivery: when GP marks result as "normal - Síle can deliver", queue outbound call. Síle calls patient, delivers result in natural Irish English, logs call in patient record
@@ -566,7 +572,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...  # for Whisper transcription
 
-# Voice AI (Síle)
+# Voice AI (VoiceHub — sister app; Síle surfaces its insights in Cúram)
 VAPI_API_KEY=...
 
 # SMS

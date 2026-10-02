@@ -16,7 +16,7 @@ export default function PublicBookingPage() {
 
   return (
     <div className="mx-auto max-w-lg p-6">
-      <SectionTitle eyebrow="Online booking" title="Book an appointment" description="Triage first. Chest pain or breathing difficulty is never booked — call 999/112. Síle uses the same API." />
+      <SectionTitle eyebrow="Online booking" title="Book an appointment" description="Triage first. Chest pain or breathing difficulty is never booked — call 999/112." />
       {emergency && <div className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-800">{emergencyScript()}</div>}
       {done && <div className="surface rounded-xl p-4 text-sm text-teal-800">{done}</div>}
       {error && <p className="mb-3 text-xs text-red-600">{error}</p>}

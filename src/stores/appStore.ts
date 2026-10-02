@@ -348,7 +348,7 @@ export const appStore = {
     const lab = state.labResults.find((item) => item.id === resultId);
     if (!lab) return { ok: false, error: 'Not found' };
     if (lab.abnormalFlags.length && delivery === 'sile') {
-      return { ok: false, error: 'Abnormal results cannot be delivered by Síle — GP callback only' };
+      return { ok: false, error: 'Abnormal results cannot be delivered by VoiceHub — GP callback only' };
     }
     setState((current) => ({
       ...current,

@@ -106,13 +106,13 @@ export function createSeedState(): PracticeState {
       { id: 'sms1', patientId: 'p3', direction: 'outbound', message: 'Reminder: appointment tomorrow 08:50 at Riverside Family Practice.', status: 'delivered', sentAt: new Date(Date.now() - 3600000).toISOString() },
     ],
     workflows: [
-      { id: 'wf1', practiceId: PRACTICE_ID, name: 'Appointment reminder → SMS 48h + 2h', triggerEvent: 'appointment.created', conditions: 'status in scheduled,confirmed', actions: ['sms.48h', 'sms.2h', 'sile.call.24h_if_unconfirmed'], active: true, runCount: 462 },
+      { id: 'wf1', practiceId: PRACTICE_ID, name: 'Appointment reminder → SMS 48h + 2h', triggerEvent: 'appointment.created', conditions: 'status in scheduled,confirmed', actions: ['sms.48h', 'sms.2h', 'voicehub.call.24h_if_unconfirmed'], active: true, runCount: 462 },
       { id: 'wf2', practiceId: PRACTICE_ID, name: 'Lab result routing → ordering GP', triggerEvent: 'lab_result.received', conditions: 'always', actions: ['route.ordering_gp', 'flag.abnormal', 'sms.if_critical'], active: true, runCount: 89 },
       { id: 'wf3', practiceId: PRACTICE_ID, name: 'Repeat Rx → queue → approve → Healthmail', triggerEvent: 'repeat_rx.requested', conditions: 'never auto-approve', actions: ['queue.gp', 'await.approval', 'healthmail.send'], active: true, runCount: 86 },
-      { id: 'wf4', practiceId: PRACTICE_ID, name: 'Payment reminder → SMS → Síle call', triggerEvent: 'invoice.unpaid_7d', conditions: 'status invoiced', actions: ['sms.payment_link', 'sile.call.14d'], active: true, runCount: 42 },
+      { id: 'wf4', practiceId: PRACTICE_ID, name: 'Payment reminder → SMS → VoiceHub call', triggerEvent: 'invoice.unpaid_7d', conditions: 'status invoiced', actions: ['sms.payment_link', 'voicehub.call.14d'], active: true, runCount: 42 },
       { id: 'wf5', practiceId: PRACTICE_ID, name: 'No-show follow-up', triggerEvent: 'appointment.dna', conditions: 'status dna', actions: ['sms.sorry_missed_you'], active: true, runCount: 18 },
-      { id: 'wf6', practiceId: PRACTICE_ID, name: 'Normal result → Síle delivery', triggerEvent: 'lab_result.marked_normal', conditions: 'no abnormal flags', actions: ['queue.sile_outbound'], active: true, runCount: 55 },
-      { id: 'wf7', practiceId: PRACTICE_ID, name: 'CDM recall sequence', triggerEvent: 'cdm.due_in_14d', conditions: 'enrolment active', actions: ['sms.recall', 'app.notify', 'sile.call'], active: false, runCount: 34 },
+      { id: 'wf6', practiceId: PRACTICE_ID, name: 'Normal result → VoiceHub delivery', triggerEvent: 'lab_result.marked_normal', conditions: 'no abnormal flags', actions: ['queue.voicehub_outbound'], active: true, runCount: 55 },
+      { id: 'wf7', practiceId: PRACTICE_ID, name: 'CDM recall sequence', triggerEvent: 'cdm.due_in_14d', conditions: 'enrolment active', actions: ['sms.recall', 'app.notify', 'voicehub.call'], active: false, runCount: 34 },
     ],
     workflowRuns: [
       { id: 'wfr1', workflowId: 'wf1', patientId: 'p3', triggerData: 'appointment a2', actionsExecuted: ['sms.48h'], result: 'ok', ranAt: new Date().toISOString() },

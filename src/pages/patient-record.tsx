@@ -220,7 +220,7 @@ function LabCard({ lab }: { lab: ReturnType<typeof useAppState>['labResults'][nu
             setError(result.ok ? '' : result.error ?? '');
           }}
         >
-          Síle can deliver
+          VoiceHub can deliver
         </AppButton>
       </div>
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}

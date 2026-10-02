@@ -238,7 +238,7 @@ does the calls instead of curl.
 | Feature | Blocked on |
 |---|---|
 | Real HealthLink message flow | Formal integration testing (month 16) |
-| Síle voice calls end-to-end | Vapi.ai account + phone number |
+| VoiceHub calls end-to-end | VoiceHub (sister app) owns patient phone calls; Vapi.ai account + phone number live there. Síle surfaces its call insights in Cúram |
 | WhatsApp reminders | Meta business verification + approved templates |
 | Automated insurer claims | Deliberately deferred ("coming soon") |
 | Sentry / PostHog / uptime | Account DSNs — wire up when created |
@@ -321,9 +321,9 @@ before you start: two Google accounts (GP + invited staff), Stripe test card
 3. HealthLink → Labs tab filters (All / Abnormal / Awaiting review) →
    **Expect**: abnormal results only offer GP callback, never AI delivery
 
-### Phase 7 — Síle AI & compliance
+### Phase 7 — Síle AI, VoiceHub & compliance
 
-1. Síle → test call → **Expect**: transcript + recording logged
+1. VoiceHub (sister app) → test call → **Expect**: transcript + recording logged; call count surfaced on Síle's Briefing
 2. Say "chest pain" → **Expect**: instructed to call 999/112
 3. Supabase `audit_log` → entries for login, note signed, Rx approved, payment
    recorded, etc.

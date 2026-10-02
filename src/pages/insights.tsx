@@ -15,7 +15,7 @@ export default function InsightsPage() {
         <MetricCard label="Panel size" value={String(state.patients.length)} detail="Registered patients" icon={ChartNoAxesCombined} tone="teal" />
         <MetricCard label="Appointments" value={String(state.appointments.length)} detail={`DNA ${dna}`} icon={ChartNoAxesCombined} tone="blue" />
         <MetricCard label="Collected" value={formatEur(revenue)} detail="Stripe + recorded payments" icon={ChartNoAxesCombined} tone="amber" />
-        <MetricCard label="Síle calls" value={String(state.sileCalls.length)} detail="Logged with transcript" icon={ChartNoAxesCombined} tone="purple" />
+        <MetricCard label="Síle drafts" value={String(state.referrals.filter((r) => r.sileDrafted).length + state.inbox.filter((m) => m.channel === 'sile_draft').length)} detail="Awaiting GP approval" icon={ChartNoAxesCombined} tone="purple" />
       </div>
     </div>
   );

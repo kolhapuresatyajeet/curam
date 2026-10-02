@@ -120,7 +120,7 @@ export default function ConsultationPage() {
         </div>
       </div>
       <aside className="surface rounded-xl p-4">
-        <h2 className="text-sm font-semibold text-slate-800">AI scribe</h2>
+        <h2 className="text-sm font-semibold text-slate-800">Síle scribe</h2>
         <label className="mt-3 flex items-center gap-2 text-xs text-slate-600">
           <input type="checkbox" checked={ui.consent} onChange={(e) => consultationStore.setConsent(e.target.checked)} />
           Patient consent for recording
