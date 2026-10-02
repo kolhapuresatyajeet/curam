@@ -42,6 +42,45 @@ export type ScribeResult = {
   summary: string;
 };
 
+/** Decode any browser recording (webm/opus, mp4/aac…) and re-encode as mono
+ *  16 kHz 16-bit WAV — the one audio format every transcription path accepts. */
+async function blobToWav(blob: Blob): Promise<Blob> {
+  const decoded = await new AudioContext().decodeAudioData(await blob.arrayBuffer());
+  const rate = 16_000;
+  const offline = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * rate)), rate);
+  const source = offline.createBufferSource();
+  source.buffer = decoded;
+  source.connect(offline.destination);
+  source.start();
+  const rendered = await offline.startRendering();
+  const samples = rendered.getChannelData(0);
+
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const writeStr = (offset: number, text: string) => {
+    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+  };
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + samples.length * 2, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, 'data');
+  view.setUint32(40, samples.length * 2, true);
+  let offset = 44;
+  for (let i = 0; i < samples.length; i++, offset += 2) {
+    const clamped = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+  }
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
 /** Calls the ai-scribe Edge Function with a recording and/or transcript. Returns null on failure. */
 export async function structureSoapRemote(input: {
   patientId: string;
@@ -58,7 +97,19 @@ export async function structureSoapRemote(input: {
   let response: Response;
   if (input.audio) {
     const form = new FormData();
-    form.append('audio', input.audio, input.audioName ?? 'consult.webm');
+    let audioBlob = input.audio;
+    let name = input.audioName ?? 'consult.webm';
+    if (!name.endsWith('.wav')) {
+      // Browsers record webm/opus (or mp4) — convert to WAV so the gateway
+      // always receives a universally accepted format.
+      try {
+        audioBlob = await blobToWav(input.audio);
+        name = 'consult.wav';
+      } catch {
+        /* conversion failed — upload the original and let the server try */
+      }
+    }
+    form.append('audio', audioBlob, name);
     form.append('patientId', input.patientId);
     if (input.transcript) form.append('transcript', input.transcript);
     response = await fetch(`${url}/functions/v1/ai-scribe`, {

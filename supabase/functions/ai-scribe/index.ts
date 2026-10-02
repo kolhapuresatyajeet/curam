@@ -56,13 +56,13 @@ async function transcribeAudio(audio: ArrayBuffer, filename: string): Promise<{ 
   const body = await response.json().catch(() => ({}));
   if (response.ok) return { transcript: body.text ?? '' };
 
-  // Gateways that only proxy chat models reject /audio/transcriptions with an
-  // invalid-model error — fall back to an audio-capable chat model instead
-  // (e.g. Gemini) so voice capture still works on text-only gateway keys.
-  const message = body.error?.message ?? '';
-  if (/invalid model name|model.*not (found|allowed)|not a valid model/i.test(message)) {
+  // Gateways that only proxy chat models reject /audio/transcriptions — fall
+  // back to an audio-capable chat model (e.g. Gemini) so voice capture still
+  // works on text-only gateway keys.
+  if (LITELLM_BASE) {
     return transcribeViaChatModel(audio, filename);
   }
+  const message = body.error?.message ?? '';
   return { error: message || `Transcription failed (HTTP ${response.status})` };
 }
 
