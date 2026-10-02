@@ -5,7 +5,7 @@ import { bootstrapPractice } from '@/lib/db';
 import { signInWithGoogle } from '@/lib/google-auth';
 import { supabaseConfigured } from '@/lib/supabase';
 import { appStore } from '@/stores/appStore';
-import { refreshAuthSession, useSupabaseAuth } from '@/stores/authSession';
+import { refreshAuthSession, signOut, useSupabaseAuth } from '@/stores/authSession';
 
 export default function SetupPage() {
   const [, setLocation] = useLocation();
@@ -123,6 +123,17 @@ export default function SetupPage() {
         <AppButton type="submit" variant="primary" disabled={busy}>
           {busy ? 'Saving…' : 'Create practice'}
         </AppButton>
+        <button
+          type="button"
+          className="block text-[11px] text-slate-500"
+          onClick={() => {
+            // Wrong Google account picked? Sign out — nothing has been
+            // created yet, and the account picker is shown on the next login.
+            void signOut();
+          }}
+        >
+          Not {auth.email ?? 'you'}? Use a different Google account
+        </button>
       </form>
     </div>
   );
