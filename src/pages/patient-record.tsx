@@ -3,6 +3,7 @@ import { useLocation, useParams } from 'wouter';
 import { AppButton, Avatar, Badge, EmptyState, Field, Tabs, inputClass } from '@/components/shared/ui';
 import { ageFromDob, formatIrishDate, formatIrishPhone, id, nowIso } from '@/lib/utils';
 import { appStore, useAppState, useSessionStaff } from '@/stores/appStore';
+import { templateLabel } from '@/lib/consultation-templates';
 import { patientName, type ConsultationTemplate } from '@/types/domain';
 
 const TABS = ['Summary', 'Timeline', 'Consultation', 'Prescriptions', 'Results', 'Referrals', 'CDM', 'Vaccines', 'Documents'];
@@ -112,7 +113,7 @@ export default function PatientRecordPage() {
               >
                 <div className="flex items-center justify-between text-[11px] text-slate-400">
                   <span>
-                    {formatIrishDate(note.createdAt)} · {note.templateType} · {note.status}
+                    {formatIrishDate(note.createdAt)} · {templateLabel(note.templateType)} · {note.status}
                     {note.aiScribeUsed && ' · Síle scribe'}
                   </span>
                   <span className="text-teal-700">{expanded ? 'Hide ▲' : 'Details ▼'}</span>

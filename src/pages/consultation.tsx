@@ -5,34 +5,8 @@ import { draftSoapFromTranscript, draftSummaryFromTranscript, structureSoapRemot
 import { id, nowIso } from '@/lib/utils';
 import { consultationStore, useConsultationStore } from '@/stores/consultationStore';
 import { appStore, useAppState, useSessionStaff } from '@/stores/appStore';
-import type { Consultation, ConsultationTemplate } from '@/types/domain';
-
-const TEMPLATES: { id: ConsultationTemplate; label: string; hint: string; placeholders: Record<'subjective' | 'objective' | 'assessment' | 'plan', string> }[] = [
-  {
-    id: 'gp_consult',
-    label: 'GP consult',
-    hint: 'Standard face-to-face GP consultation in surgery.',
-    placeholders: { subjective: 'Presenting complaint, history…', objective: 'Examination findings, vitals…', assessment: 'Diagnosis / differential…', plan: 'Management, prescriptions, follow-up…' },
-  },
-  {
-    id: 'phone_triage',
-    label: 'Phone triage',
-    hint: 'Telephone triage — no examination possible. Record advice and safety-netting.',
-    placeholders: { subjective: 'History taken over the phone…', objective: 'No examination (remote consult).', assessment: 'Triage impression / category…', plan: 'Advice given, safety-netting, when to call back or attend…' },
-  },
-  {
-    id: 'nurse_clinic',
-    label: 'Nurse clinic',
-    hint: 'Nurse-led clinic — observations, injections, wound care.',
-    placeholders: { subjective: 'Reason for nurse appointment…', objective: 'Observations (BP, HR, SpO2), wound state…', assessment: 'Nurse assessment…', plan: 'Treatment given, next nurse appointment…' },
-  },
-  {
-    id: 'home_visit',
-    label: 'Home visit',
-    hint: 'Out-of-surgery visit — note home conditions and community follow-up.',
-    placeholders: { subjective: 'History at home visit…', objective: 'Findings in the home environment…', assessment: 'Assessment…', plan: 'Arrangements, community follow-up…' },
-  },
-];
+import { CONSULTATION_TEMPLATES } from '@/lib/consultation-templates';
+import type { Consultation } from '@/types/domain';
 
 export default function ConsultationPage() {
   const params = useParams<{ id: string }>();
@@ -104,21 +78,26 @@ export default function ConsultationPage() {
     <div className="fade-in grid gap-4 lg:grid-cols-[1fr_320px]">
       <div>
         <SectionTitle title={`Consultation · ${patient.firstName} ${patient.lastName}`} description="SOAP note. AI drafts require your approval before they are written into the record." />
-        <div className="mb-3 flex flex-wrap gap-2">
-          {TEMPLATES.map((item) => (
-            <button key={item.id} type="button" onClick={() => patch({ templateType: item.id })} className={`rounded-md px-3 py-1.5 text-[11px] ${note.templateType === item.id ? 'bg-teal-50 font-medium text-teal-800' : 'text-slate-400'}`}>
-              {item.label}
-            </button>
-          ))}
+        <div className="mb-3">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Note type</p>
+          <div className="flex flex-wrap gap-2">
+            {CONSULTATION_TEMPLATES.map((item) => (
+              <button key={item.id} type="button" onClick={() => patch({ templateType: item.id })} className={`rounded-md px-3 py-1.5 text-[11px] ${note.templateType === item.id ? 'bg-teal-50 font-medium text-teal-800' : 'text-slate-400'}`}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[11px] italic text-slate-500">
+            Pick the kind of consultation — it adjusts the example prompts in the SOAP fields below. {CONSULTATION_TEMPLATES.find((item) => item.id === note.templateType)?.hint}
+          </p>
         </div>
-        <p className="mb-3 text-[11px] italic text-slate-500">{TEMPLATES.find((item) => item.id === note.templateType)?.hint}</p>
         <div className="surface space-y-3 rounded-xl p-4">
           {(['subjective', 'objective', 'assessment', 'plan'] as const).map((field) => (
             <Field key={field} label={field.toUpperCase()}>
               <textarea
                 className={`${inputClass} h-24 py-2`}
                 value={note[field]}
-                placeholder={TEMPLATES.find((item) => item.id === note.templateType)?.placeholders[field]}
+                placeholder={CONSULTATION_TEMPLATES.find((item) => item.id === note.templateType)?.placeholders[field]}
                 onChange={(e) => patch({ [field]: e.target.value })}
               />
             </Field>
@@ -129,6 +108,7 @@ export default function ConsultationPage() {
               size="sm"
               onClick={() => {
                 appStore.saveConsultation(note);
+                setLocation(`/patients/${patient.id}`);
               }}
             >
               Save draft
