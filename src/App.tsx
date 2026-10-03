@@ -28,6 +28,7 @@ import SilePage from '@/pages/sile';
 import StaffPage from '@/pages/staff';
 import SupportPage from '@/pages/support';
 import WaitingRoomPage from '@/pages/waiting-room';
+import WelcomePage from '@/pages/welcome';
 import WorkflowsPage from '@/pages/workflows';
 import { useAuthListener } from '@/stores/authSession';
 import SileChatWidget from '@/components/sile/SileChatWidget';
@@ -49,6 +50,7 @@ function Router() {
       <Switch>
         <Route path="/login" component={LoginPage} />
         <Route path="/setup" component={SetupPage} />
+        <Route path="/welcome" component={WelcomePage} />
         <Route path="/support" component={SupportPage} />
         <Route path="/book">
           <CookieConsent />

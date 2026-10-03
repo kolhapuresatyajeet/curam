@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 
-export async function signInWithGoogle(nextPath: '/setup' | '/' = '/setup') {
+export async function signInWithGoogle(nextPath: '/setup' | '/' | '/welcome' = '/setup') {
   if (!supabase) {
     return { error: new Error('Supabase is not configured') };
   }

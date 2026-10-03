@@ -155,6 +155,11 @@ export async function sendViaHealthmail(ids: { prescriptionId?: string; repeatRe
   return authedPost('send-healthmail', ids);
 }
 
+/** Remove a staff member from the practice (gp/pm only): revoke login + kill sessions. */
+export async function removeStaffMember(staffId: string) {
+  return authedPost('remove-staff-member', { staffId });
+}
+
 export async function fetchAppointments(): Promise<Appointment[]> {
   if (!supabase) return [];
   const { data, error } = await supabase.from('appointments').select('*').order('start_time');

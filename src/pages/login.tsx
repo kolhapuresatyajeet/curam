@@ -25,7 +25,7 @@ export default function LoginPage() {
     return <Redirect to="/support" />;
   }
   if (supabaseConfigured && auth.ready && auth.needsSetup) {
-    return <Redirect to="/setup" />;
+    return <Redirect to="/welcome" />;
   }
 
   const signInWithPassword = () => {

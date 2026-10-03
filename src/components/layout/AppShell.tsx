@@ -64,7 +64,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (!auth.userId) return <Redirect to="/login" />;
     // Platform admins have no staff row — their console is /support, not the setup wizard.
     if (!auth.staff && auth.platformAdmin) return <Redirect to="/support" />;
-    if (auth.needsSetup) return <Redirect to="/setup" />;
+    if (auth.needsSetup) return <Redirect to="/welcome" />;
   } else if (!state.session || Date.now() > state.session.expiresAt) {
     return <Redirect to="/login" />;
   }
