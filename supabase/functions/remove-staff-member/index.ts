@@ -1,4 +1,5 @@
 import { cors, json } from '../_shared/http.ts';
+import { withMonitoring } from '../_shared/monitoring.ts';
 
 // Remove a staff member from the practice (GP/PM only).
 //
@@ -19,7 +20,7 @@ const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
-Deno.serve(async (req) => {
+Deno.serve(withMonitoring(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
@@ -91,4 +92,4 @@ Deno.serve(async (req) => {
   });
 
   return json({ ok: true, name: target.name });
-});
+}, 'remove-staff-member'));

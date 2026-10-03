@@ -1,4 +1,5 @@
 import { cors, json } from '../_shared/http.ts';
+import { withMonitoring } from '../_shared/monitoring.ts';
 
 // Staff-side GDPR / SAR export. GP or practice manager only.
 //
@@ -60,7 +61,7 @@ function csvEscape(value: unknown): string {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withMonitoring(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
   const url = new URL(req.url);
@@ -284,4 +285,4 @@ Deno.serve(async (req) => {
       'Content-Disposition': `attachment; filename="curam-${patientId ? 'patient-record' : 'practice'}-export-${new Date().toISOString().slice(0, 10)}.json"`,
     },
   });
-});
+}, 'practice-data-export'));

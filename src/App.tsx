@@ -31,9 +31,12 @@ import WaitingRoomPage from '@/pages/waiting-room';
 import WelcomePage from '@/pages/welcome';
 import WorkflowsPage from '@/pages/workflows';
 import { useAuthListener } from '@/stores/authSession';
+import { initMonitoring } from '@/lib/monitoring';
 import SileChatWidget from '@/components/sile/SileChatWidget';
 
 const queryClient = new QueryClient();
+
+initMonitoring();
 
 function Authed({ children }: { children: ReactNode }) {
   return (

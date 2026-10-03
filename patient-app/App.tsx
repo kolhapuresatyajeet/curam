@@ -1,5 +1,6 @@
 // MyCúram — patient app entry. Auth gate + simple stack navigation.
 // Elderly-first: taps only, large targets (see src/ui.tsx).
+import './src/lib/monitoring';
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';

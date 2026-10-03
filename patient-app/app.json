@@ -16,6 +16,9 @@
     "extra": {
       "supabaseUrl": "https://duphvinfwkskjkfqaetr.supabase.co",
       "supabaseAnonKey": ""
-    }
+    },
+    "plugins": [
+      "sentry-expo"
+    ]
   }
 }

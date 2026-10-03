@@ -106,8 +106,15 @@ Prices are list price at time of writing — check before purchase.
 
 ## 11. Monitoring & support readiness
 
-- [ ] Sentry (or similar) wired into web + patient app with release tags
-- [ ] Uptime monitor (UptimeRobot free tier) on `/login` + Supabase health
+- [ ] **Sentry** (free Developer plan) — one project, three SDKs already wired in code:
+  - [ ] Create the project at sentry.io → copy the DSN
+  - [ ] `VITE_SENTRY_DSN` → Vercel env vars (web app, React 18 build uses @sentry/react v9)
+  - [ ] `SENTRY_DSN` → `supabase secrets set SENTRY_DSN=...` (Edge Functions — `withMonitoring` wrapper is applied to practice-data-export + remove-staff-member; roll out to remaining functions as they change)
+  - [ ] `EXPO_PUBLIC_SENTRY_DSN` → patient app env (sentry-expo; add its config plugin when doing the EAS build — native crash reporting needs it, JS errors work without)
+  - [ ] Configure an alert rule: new issue → email + Slack/Telegram
+  - [ ] Verify PHI scrubbing: fetch/console breadcrumbs are stripped in src/lib/monitoring.ts — never log patient identifiers
+- [ ] **UptimeRobot** (free): monitors on `/login`, `/book`, Supabase `/auth/v1/health` → email alerts
+- [ ] **Healthchecks.io** (free): heartbeat ping at the end of the reminders cron function → alert when the cron silently stops
 - [ ] Weekly automated DB backup export to encrypted cold storage (own machine or EU object storage)
 - [ ] Support workflow: `/support` impersonation console (live), used only with a stated reason; audit reviewed monthly
 - [ ] Status page or at least a WhatsApp broadcast list for clinic outages
