@@ -134,19 +134,24 @@ Prices are list price at time of writing — check before purchase.
 
 ---
 
-## Rough monthly run cost (10 clinics)
+## Rough monthly run cost
 
-| Item | ~Cost/mo |
-|---|---|
-| Supabase Pro + PITR + compute | €55–90 |
-| Vercel Pro (1–2 seats) | €20–40 |
-| Resend Pro | €20 |
-| Twilio (WhatsApp/SMS reminders) | €50–150 |
-| AI via LiteLLM (capped €15/clinic) | ≤ €150 |
-| LiteLLM gateway hosting (EU VPS) | €5–20 |
-| Sentry Team | €26 |
-| Domain | ~€2 |
-| Apple/Google dev accounts (amortised) | ~€10 |
-| **Total** | **~€240–500/mo** |
+| Item | 10 clinics | 50 clinics | Notes |
+|---|---|---|---|
+| Supabase Pro (incl. base compute) | €25–60 | €35–60 | Pro includes Micro compute + 8GB DB — enough for 50 clinics; add Small compute (+$10) when DB CPU warrants. PITR (+€30) recommended but deferrable if daily backups + test restores are done. |
+| Vercel Pro (1 seat) | €20 | €20–40 | Serves 50 clinics on one seat; bandwidth only becomes a factor with patient-app web traffic. |
+| Resend (email) | €0 | €20 | Free tier = 100 emails/day (~3k/mo) — enough for 10 clinics; go Pro when bookings outgrow it. |
+| Twilio (WhatsApp/SMS) | €50–400 | €750–2,500 | **The dominant line at scale** — ~€0.04/msg WhatsApp utility, ~€0.05–0.07 SMS to IE. 10 clinics ≈ 10–15k reminders/mo. Mitigate: email-first reminders, WhatsApp only for opted-in patients. |
+| AI via LiteLLM (capped) | ≤ €150 | ≤ €750 | ~€0.01/consult; hard-capped at €15/clinic/mo — grows linearly with usage, covered by per-clinic fee. |
+| LiteLLM gateway (EU VPS) | €5–10 | €10–20 | A thin proxy — same Hetzner box serves 50 clinics. |
+| ElevenLabs (voice calls) | €0–95 | €95–310 | Missing before — Síle's lab-result calls. Creator ($22, 500 min) covers ~10 clinics at ~20 calls/day; Pro ($99) for 50. Free tier = 10 min, dev only. |
+| Sentry | €0 | €0–26 | Free Developer plan until >5k errors/mo — unlikely at this scale. |
+| Domain | ~€2 | ~€2 | curam.website. |
+| Apple/Google dev accounts | ~€10 | ~€10 | $99/yr + $25 once, amortised. |
+| **Total** | **~€130–430/mo** | **~€940–1,800/mo** | Messaging + voice dominate at 50; both scale with usage and are covered by per-clinic fees. |
 
-Per-clinic revenue target: €40–80/clinic/mo → 10 clinics covers costs with margin. Charge more than you think — you're replacing Socrates-seat costs, not competing with free.
+**Cost levers at 10 clinics (getting to ~€130/mo):** stay on Resend free tier, skip PITR until first paying clinic (do manual backup exports + one test restore instead), Sentry free tier, ElevenLabs free tier while calls aren't live yet.
+
+**At 50 clinics:** the architecture holds unchanged (Supabase, Vercel, LiteLLM gateway are all nowhere near limits). The lines that actually move are **usage-billed** — messaging, AI, voice — which is the right shape: costs grow only when clinics use the product, so price per-clinic subscriptions (€40–80/mo) to stay 5–10× above direct cost per clinic.
+
+Per-clinic revenue target: €40–80/clinic/mo → at 10 clinics revenue (€400–800) covers run costs with margin; at 50 it's solidly profitable even with usage lines growing. Charge more than you think — you're replacing Socrates-seat costs, not competing with free.
