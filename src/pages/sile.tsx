@@ -3,9 +3,9 @@ import { AppButton, Badge, EmptyState, MetricCard, SectionTitle, Tabs } from '@/
 import { useAppState } from '@/stores/appStore';
 import { useLocation } from 'wouter';
 import { patientName } from '@/types/domain';
-import { FileText, MessageCircle, Sparkles } from 'lucide-react';
+import { FileText, MessageCircle, Mic, Sparkles } from 'lucide-react';
 import { formatIrishDateTime } from '@/lib/utils';
-import VoiceChat from '@/components/sile/VoiceChat';
+import { openVoiceWidget } from '@/components/sile/voiceWidget';
 
 /** Síle is Cúram's own GP-facing AI layer: briefing, drafts and (soon) chat.
  *  VoiceHub — its sister app — makes the patient phone calls; Síle surfaces
@@ -87,7 +87,21 @@ export default function SilePage() {
         </div>
       )}
 
-      {tab === 'Chat' && <VoiceChat />}
+      {tab === 'Chat' && (
+        <div className="surface rounded-xl p-4">
+          <h2 className="text-sm font-semibold text-slate-800">Voice & chat, everywhere</h2>
+          <p className="mt-1 text-[12px] leading-5 text-slate-600">
+            Síle's voice now follows you around Cúram — use the <strong>purple mic button</strong> (bottom-right) from
+            any page. The panel stays open while she navigates you to a patient, and on a patient's record she knows
+            who you're looking at.
+          </p>
+          <div className="mt-3">
+            <AppButton size="sm" onClick={openVoiceWidget}>
+              <Mic size={13} /> Open Síle voice
+            </AppButton>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

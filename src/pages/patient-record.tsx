@@ -7,7 +7,8 @@ import { templateLabel } from '@/lib/consultation-templates';
 import { canManagePractice } from '@/lib/roles';
 import { exportPatientHistoryCsv, exportPatientRecord } from '@/lib/export';
 import { patientName, type ConsultationTemplate } from '@/types/domain';
-import VoiceChat from '@/components/sile/VoiceChat';
+import { openVoiceWidget } from '@/components/sile/voiceWidget';
+import { Mic } from 'lucide-react';
 
 const TABS = ['Summary', 'Timeline', 'Consultation', 'Prescriptions', 'Results', 'Referrals', 'CDM', 'Vaccines', 'Documents'];
 
@@ -60,7 +61,17 @@ export default function PatientRecordPage() {
       <Tabs items={TABS} value={tab} onChange={setTab} />
 
       {tab === 'Summary' && (
-        <VoiceChat patientContext={{ patientId: patient.id, patientName: patientName(patient) }} />
+        <button
+          type="button"
+          onClick={openVoiceWidget}
+          className="mt-3 flex w-full items-center gap-2 rounded-xl border border-purple-200 bg-purple-50/60 px-4 py-2.5 text-left text-[12px] text-purple-800 transition hover:bg-purple-100"
+        >
+          <Mic size={14} />
+          <span>
+            <strong>Ask Síle about {patientName(patient)}</strong> — labs, last visit, what we decided. She picks up
+            this patient automatically while you're on the record.
+          </span>
+        </button>
       )}
 
       {tab === 'Summary' && (

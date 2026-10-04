@@ -71,7 +71,7 @@ const STATE_LABEL: Record<SileVoiceState, string> = {
 };
 
 /** Síle conversation panel: on-device voice loop + local intents + server brain. */
-export default function VoiceChat({ patientContext }: { patientContext?: SilePatientContext }) {
+export default function VoiceChat({ patientContext, hidden }: { patientContext?: SilePatientContext; hidden?: boolean }) {
   const state = useAppState();
   const [, setLocation] = useLocation();
   const [log, setLog] = useState<ChatEntry[]>([]);
@@ -152,6 +152,15 @@ export default function VoiceChat({ patientContext }: { patientContext?: SilePat
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [log]);
+
+  // Privacy: when the widget hides us (modal closed), the mic and playback
+  // stop — nothing keeps capturing in the background.
+  useEffect(() => {
+    if (hidden) {
+      voiceRef.current?.stopListening();
+      voiceRef.current?.stopSpeaking();
+    }
+  }, [hidden]);
 
   const runCommand = useCallback(
     async (text: string, source: 'voice' | 'typed') => {

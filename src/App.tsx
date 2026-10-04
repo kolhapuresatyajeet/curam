@@ -33,6 +33,7 @@ import WorkflowsPage from '@/pages/workflows';
 import { useAuthListener } from '@/stores/authSession';
 import { initMonitoring } from '@/lib/monitoring';
 import SileChatWidget from '@/components/sile/SileChatWidget';
+import SileVoiceWidget from '@/components/sile/SileVoiceWidget';
 
 const queryClient = new QueryClient();
 
@@ -43,6 +44,7 @@ function Authed({ children }: { children: ReactNode }) {
     <AppShell>
       {children}
       <SileChatWidget />
+      <SileVoiceWidget />
     </AppShell>
   );
 }
