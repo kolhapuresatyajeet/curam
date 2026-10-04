@@ -24,9 +24,9 @@ function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json' } });
 }
 
-// Default voice: "Sarah" (soft, warm, en-IE/en-GB friendly). Override per
-// practice later with the ELEVENLABS_VOICE_ID secret.
-const DEFAULT_VOICE_ID = 'EXAVITQu4vr4';
+// Default voice: "Sarah" (mature, reassuring, confident — en female). Override
+// per practice later with the ELEVENLABS_VOICE_ID secret.
+const DEFAULT_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL';
 // Lowest-latency model; half the per-character price of Turbo.
 const DEFAULT_MODEL = 'eleven_flash_v2_5';
 // Flash ≈ $0.11 / 1k characters at Creator tier → 110 millicents/char.
