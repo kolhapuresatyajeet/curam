@@ -265,9 +265,10 @@ export class SileVoice {
    *  playing while later chunks are still downloading — same pipelining as
    *  the Kokoro path. Any failure degrades to the on-device stack silently. */
   private async speakWithPremiumVoice(text: string) {
-    const gen = this.speakGen;
     this.stopSpeaking(); // clear anything mid-flight (also bumps speakGen)
-    if (gen !== this.speakGen) return; // superseded before we started
+    // Capture AFTER stopSpeaking — the guard below detects *external*
+    // supersession (a barge-in or newer utterance), not our own teardown.
+    const gen = this.speakGen;
     this.muted = true;
     this.setState('speaking');
 
