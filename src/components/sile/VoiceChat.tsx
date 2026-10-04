@@ -35,6 +35,8 @@ export default function VoiceChat() {
   const [error, setError] = useState<string | null>(null);
   const [modelInfo, setModelInfo] = useState<{ sttDevice?: string; ttsDevice?: string; ttsFallback: boolean } | null>(null);
   const [listening, setListening] = useState(false);
+  /** No GPU adapter on this device → Síle will always be on the slow path. */
+  const [gpuUnavailable, setGpuUnavailable] = useState(false);
 
   const voiceRef = useRef<SileVoice | null>(null);
   const stateRef = useRef(state);
@@ -44,6 +46,29 @@ export default function VoiceChat() {
 
   const pushEntry = useCallback((entry: ChatEntry) => {
     setLog((current) => [...current, entry]);
+  }, []);
+
+  // Capability probe on mount — cheap, no models involved. Tells us straight
+  // away whether the fast (WebGPU) path is even possible on this device, so
+  // the speed tip can show before any voice is used.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const gpu = (navigator as Navigator & { gpu?: { requestAdapter: () => Promise<unknown> } }).gpu;
+        if (!gpu) {
+          if (!cancelled) setGpuUnavailable(true);
+          return;
+        }
+        const adapter = await gpu.requestAdapter();
+        if (!cancelled && !adapter) setGpuUnavailable(true);
+      } catch {
+        if (!cancelled) setGpuUnavailable(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -162,7 +187,7 @@ export default function VoiceChat() {
       </div>
 
       {/* Speed tip — only when she is on the battery-saving (non-GPU) path. */}
-      {modelInfo?.sttDevice && modelInfo.sttDevice !== 'webgpu' && (
+      {(gpuUnavailable || modelInfo?.sttDevice?.startsWith('wasm')) && (
         <p className="border-b border-slate-100 bg-amber-50/60 px-4 py-2 text-[11px] leading-5 text-amber-800">
           💡 Síle is running in her battery-saving mode — she works fine, just a little slower. To let her use your
           computer's full speed: in Chrome open <strong>Settings → System</strong> and turn on{' '}
