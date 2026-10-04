@@ -53,7 +53,7 @@ export default function VoiceChat() {
         runCommand(text, 'voice');
       },
       onModelInfo: setModelInfo,
-      onError: (message) => setError(message),
+      onError: (message) => setError(`${message} — voice may be unavailable on this device; the typed box below always works.`),
     });
     voiceRef.current = voice;
     return () => {

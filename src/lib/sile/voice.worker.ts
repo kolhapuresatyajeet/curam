@@ -71,23 +71,42 @@ async function initStt(): Promise<string> {
     model: string,
     options?: Record<string, unknown>,
   ) => Promise<AutomaticSpeechRecognitionPipeline>;
-  // Ladder: WebGPU + base → WASM + base (quantised). Base handles Irish
-  // accents better than tiny; quantised keeps the download ~40–80 MB.
+
+  // Probe for a usable GPU adapter FIRST. Chrome exposes navigator.gpu even
+  // when it cannot grant an adapter (hardware acceleration off, VMs, old
+  // builds) — attempting WebGPU then fails at ORT session init and poisons
+  // the runtime so the WASM fallback fails with "no available backend found".
+  let gpuOk = false;
   try {
-    asr = await makePipeline('automatic-speech-recognition', 'Xenova/whisper-base', {
-      device: 'webgpu',
-      dtype: 'q4',
-      progress_callback: onProgress,
-    });
-    return 'webgpu';
+    const gpu = (self.navigator as Navigator & { gpu?: { requestAdapter: () => Promise<unknown> } }).gpu;
+    if (gpu) gpuOk = Boolean(await gpu.requestAdapter());
   } catch {
-    asr = await makePipeline('automatic-speech-recognition', 'Xenova/whisper-base', {
-      device: 'wasm',
-      dtype: 'q8',
-      progress_callback: onProgress,
-    });
-    return 'wasm';
+    gpuOk = false;
   }
+
+  // Ladder: WebGPU + base → WASM + base (quantised) → WASM + tiny. Base
+  // handles Irish accents better than tiny; quantised keeps downloads small.
+  const attempts: { device: string; model: string; dtype: string; label: string }[] = [];
+  if (gpuOk) attempts.push({ device: 'webgpu', model: 'Xenova/whisper-base', dtype: 'q4', label: 'webgpu' });
+  attempts.push({ device: 'wasm', model: 'Xenova/whisper-base', dtype: 'q8', label: 'wasm' });
+  attempts.push({ device: 'wasm', model: 'Xenova/whisper-tiny', dtype: 'q8', label: 'wasm-tiny' });
+
+  let lastError: unknown;
+  for (const attempt of attempts) {
+    try {
+      asr = await makePipeline('automatic-speech-recognition', attempt.model, {
+        device: attempt.device,
+        dtype: attempt.dtype,
+        progress_callback: onProgress,
+      });
+      return attempt.label;
+    } catch (error) {
+      lastError = error;
+      // Ladder step-down is normal behaviour — keep it out of the UI.
+      console.warn(`[sile-voice] STT backend "${attempt.label}" failed, trying next:`, error);
+    }
+  }
+  throw lastError;
 }
 
 async function initTts(): Promise<string> {
