@@ -66,7 +66,7 @@ export default function SileVoiceWidget() {
             <X size={16} />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1">
           <VoiceChat patientContext={patientContext} hidden={!open} listenToken={widget.listenPulse} />
         </div>
       </div>

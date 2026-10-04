@@ -14,6 +14,9 @@ import { SileVoice, type SileVoiceState } from '@/lib/sile/voice';
 
 type ChatEntry = { role: 'user' | 'sile'; text: string; at: string };
 
+/** Keep the panel light — the last ~15 exchanges. Older turns are dropped. */
+const MAX_LOG_ENTRIES = 30;
+
 /** Patient context when Síle is embedded on a patient's record page. */
 export type SilePatientContext = { patientId: string; patientName: string };
 
@@ -98,7 +101,7 @@ export default function VoiceChat({ patientContext, hidden, listenToken = 0 }: {
   patientContextRef.current = patientContext;
 
   const pushEntry = useCallback((entry: ChatEntry) => {
-    setLog((current) => [...current, entry]);
+    setLog((current) => [...current, entry].slice(-MAX_LOG_ENTRIES));
   }, []);
 
   // Capability probe on mount — cheap, no models involved. Tells us straight
@@ -274,8 +277,8 @@ export default function VoiceChat({ patientContext, hidden, listenToken = 0 }: {
   const speaking = voiceState === 'speaking';
 
   return (
-    <div className="surface rounded-xl">
-      {/* Status bar */}
+    <div className="surface flex h-full min-h-0 flex-col rounded-xl">
+      {/* Status bar — pinned at the top, never scrolls away */}
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3">
         <div className="flex items-center gap-2">
           <span className={`icon-box ${speaking ? 'icon-purple' : listening ? 'icon-coral' : 'icon-teal'}`}>
@@ -329,7 +332,7 @@ export default function VoiceChat({ patientContext, hidden, listenToken = 0 }: {
       </div>
 
       {/* Conversation log */}
-      <div ref={logRef} className="max-h-80 min-h-40 space-y-2 overflow-y-auto px-4 py-3">
+      <div ref={logRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-3">
         {log.length === 0 && (
           <p className="py-6 text-center text-[12px] text-slate-500">
             Everything runs on this device — your voice never leaves the browser. Say things like “read me my day”,
