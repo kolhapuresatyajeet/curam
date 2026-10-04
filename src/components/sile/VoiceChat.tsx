@@ -40,6 +40,7 @@ export default function VoiceChat() {
   const stateRef = useRef(state);
   stateRef.current = state;
   const logRef = useRef<HTMLDivElement | null>(null);
+  const runCommandRef = useRef<(text: string, source: 'voice' | 'typed') => Promise<void>>(async () => {});
 
   const pushEntry = useCallback((entry: ChatEntry) => {
     setLog((current) => [...current, entry]);
@@ -48,12 +49,10 @@ export default function VoiceChat() {
   useEffect(() => {
     const voice = new SileVoice({
       onState: setVoiceState,
-      onTranscript: (text) => {
-        setListening(false);
-        runCommand(text, 'voice');
-      },
+      onTranscript: (text) => runCommandRef.current(text, 'voice'),
       onModelInfo: setModelInfo,
       onError: (message) => setError(`${message} — voice may be unavailable on this device; the typed box below always works.`),
+      onListeningChange: setListening,
     });
     voiceRef.current = voice;
     return () => {
@@ -100,6 +99,7 @@ export default function VoiceChat() {
     },
     [pushEntry, setLocation, log],
   );
+  runCommandRef.current = runCommand;
 
   const toggleMic = useCallback(async () => {
     const voice = voiceRef.current;
@@ -108,15 +108,12 @@ export default function VoiceChat() {
     try {
       if (listening) {
         voice.flush();
-        setListening(false);
         return;
       }
       voice.stopSpeaking(); // barge-in: talking over Síle stops her
       await voice.startListening();
-      setListening(true);
     } catch (micError) {
       setError(`Microphone unavailable: ${String(micError)}`);
-      setListening(false);
     }
   }, [listening]);
 

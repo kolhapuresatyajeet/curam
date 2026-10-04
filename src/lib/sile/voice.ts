@@ -16,6 +16,7 @@ export type SileVoiceCallbacks = {
   onTranscript: (text: string) => void;
   onModelInfo: (info: { sttDevice?: string; ttsDevice?: string; ttsFallback: boolean }) => void;
   onError: (message: string) => void;
+  onListeningChange: (listening: boolean) => void;
 };
 
 const SAMPLE_RATE = 16_000;
@@ -50,6 +51,8 @@ export class SileVoice {
   private currentSource: AudioBufferSourceNode | null = null;
   private osVoiceFallback = false;
   private kokoroReady = false;
+  /** True while Síle is talking (or just finished) — mic frames are discarded. */
+  private muted = false;
 
   constructor(callbacks: SileVoiceCallbacks) {
     this.callbacks = callbacks;
@@ -88,7 +91,11 @@ export class SileVoice {
       case 'transcript':
         if (typeof msg.reqId === 'number') this.pendingTranscribe.delete(msg.reqId);
         if (this.state === 'transcribing') this.setState('idle');
-        if (msg.text) this.callbacks.onTranscript(msg.text);
+        // Push-to-talk semantics: one command per tap. Stop the mic before
+        // processing so Síle's spoken reply can never be fed back in.
+        this.stopListening();
+        const text = (msg.text ?? '').trim();
+        if (isRealSpeech(text)) this.callbacks.onTranscript(text);
         break;
       case 'speech':
         if (msg.wav && msg.sampleRate) {
@@ -135,17 +142,21 @@ export class SileVoice {
     this.speechFrames = [];
     this.inSpeech = false;
     this.listening = true;
+    this.callbacks.onListeningChange(true);
     this.setState('listening');
   }
 
   stopListening() {
+    if (!this.listening) return;
     this.listening = false;
+    this.callbacks.onListeningChange(false);
     this.processor?.disconnect();
     this.source?.disconnect();
     this.stream?.getTracks().forEach((track) => track.stop());
     this.processor = null;
     this.source = null;
     this.stream = null;
+    this.muted = false;
     if (this.state === 'listening') this.setState('idle');
     // If speech was mid-flight but below finalisation threshold, drop it —
     // a deliberate stop tap means "forget that".
@@ -154,7 +165,7 @@ export class SileVoice {
   }
 
   private onAudioFrame(frame: Float32Array) {
-    if (!this.listening) return;
+    if (!this.listening || this.muted) return;
     let sum = 0;
     for (let i = 0; i < frame.length; i++) sum += frame[i] * frame[i];
     const rms = Math.sqrt(sum / frame.length);
@@ -196,8 +207,9 @@ export class SileVoice {
     this.stopListening();
   }
 
-  /** Speak a reply. Uses Kokoro once loaded, otherwise the OS voice — never blocks. */
+  /** Speak a reply. Mutes the mic while she talks so she never hears herself. */
   speak(text: string) {
+    this.muted = true;
     if (this.osVoiceFallback || !this.kokoroReady) {
       this.speakWithOsVoice(text);
       return;
@@ -214,6 +226,7 @@ export class SileVoice {
 
   stopSpeaking() {
     this.speakQueue = [];
+    this.muted = false;
     if (this.currentSource) {
       try {
         this.currentSource.stop();
@@ -240,7 +253,13 @@ export class SileVoice {
     source.onended = () => {
       this.currentSource = null;
       if (this.speakQueue.length) void this.playNextChunk();
-      else if (this.state === 'speaking') this.setState('idle');
+      else {
+        // Brief grace period so speaker tail-off never reaches the mic.
+        window.setTimeout(() => {
+          this.muted = false;
+          if (this.state === 'speaking') this.setState('idle');
+        }, 300);
+      }
     };
     source.connect(this.playbackContext.destination);
     source.start();
@@ -257,12 +276,14 @@ export class SileVoice {
     const voices = window.speechSynthesis.getVoices();
     const preferred = voices.find((v) => /en-(IE|GB)/i.test(v.lang)) ?? voices.find((v) => v.lang.startsWith('en'));
     if (preferred) utterance.voice = preferred;
-    utterance.onend = () => {
-      if (this.state === 'speaking') this.setState('idle');
+    const done = () => {
+      window.setTimeout(() => {
+        this.muted = false;
+        if (this.state === 'speaking') this.setState('idle');
+      }, 300);
     };
-    utterance.onerror = () => {
-      if (this.state === 'speaking') this.setState('idle');
-    };
+    utterance.onend = done;
+    utterance.onerror = done;
     window.speechSynthesis.speak(utterance);
   }
 
@@ -284,4 +305,17 @@ function concatFrames(frames: Float32Array[]): Float32Array {
     offset += frame.length;
   }
   return out;
+}
+
+/**
+ * Whisper hallucinates artifacts on silence/speaker-bleed ("[BLANK_AUDIO]",
+ * "(inaudible)") — those are not commands, so drop them.
+ */
+export function isRealSpeech(text: string): boolean {
+  const trimmed = text.trim();
+  if (trimmed.length < 2) return false;
+  if (/^[[(](?:\s*(?:blank[_\s-]?audio|inaudible|silence|music|applause|noise|pause)\s*)[\])]$/i.test(trimmed)) return false;
+  if (/^[[(].*[\])]$/.test(trimmed)) return false; // any fully bracketed tag
+  if (!/[a-z\u00c0-\u024f]/i.test(trimmed)) return false; // must contain letters
+  return true;
 }
