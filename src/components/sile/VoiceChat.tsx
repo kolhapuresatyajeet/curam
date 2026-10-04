@@ -8,6 +8,8 @@ import { executeSileCommand } from '@/lib/sile/intents';
 import { chatWithSile } from '@/lib/sile-chat';
 import { askSileCommand } from '@/lib/sile-command';
 import { deviceBrainPrompt, deviceBrainStatus, type DeviceBrainStatus } from '@/lib/sile/device-brain';
+import { premiumVoiceEnabled } from '@/lib/sile/premium-voice';
+import { useFeatureFlag } from '@/lib/featureFlags';
 import { SileVoice, type SileVoiceState } from '@/lib/sile/voice';
 
 type ChatEntry = { role: 'user' | 'sile'; text: string; at: string };
@@ -82,6 +84,8 @@ export default function VoiceChat({ patientContext }: { patientContext?: SilePat
   const [gpuUnavailable, setGpuUnavailable] = useState(false);
   /** Chrome's built-in Nano brain — 'available' means on-device answers are live. */
   const [brainStatus, setBrainStatus] = useState<DeviceBrainStatus | null>(null);
+  /** Premium (ElevenLabs) TTS — feature-flagged, enabled for testing. */
+  const [premiumVoice] = useFeatureFlag('silePremiumVoice');
 
   const voiceRef = useRef<SileVoice | null>(null);
   const stateRef = useRef(state);
@@ -256,7 +260,7 @@ export default function VoiceChat({ patientContext }: { patientContext?: SilePat
             <p className="text-[11px] text-slate-500">
               {STATE_LABEL[voiceState]}
               {modelInfo?.sttDevice ? ` · ears: ${modelInfo.sttDevice}` : ''}
-              {modelInfo ? ` · voice: ${modelInfo.ttsFallback ? 'browser' : 'Kokoro'}` : ''}
+              {modelInfo ? ` · voice: ${premiumVoiceEnabled() ? 'ElevenLabs' : modelInfo.ttsFallback ? 'browser' : 'Kokoro'}` : ''}
               {brainStatus ? ` · brain: ${brainStatus === 'available' ? 'on-device' : 'server'}` : ''}
             </p>
           </div>

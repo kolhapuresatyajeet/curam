@@ -8,6 +8,10 @@
 //
 // No audio ever leaves the device: the only network traffic is the one-time
 // model download from the Hugging Face CDN (cached by the browser after that).
+// (Premium ElevenLabs TTS is the one exception — Phase 3, behind the
+// silePremiumVoice flag, and off by default until the EU-residency review.)
+
+import { chunkForTts, fetchPremiumChunk, premiumVoiceEnabled } from './premium-voice';
 
 export type SileVoiceState = 'idle' | 'loading' | 'listening' | 'transcribing' | 'speaking';
 
@@ -72,6 +76,9 @@ export class SileVoice {
   private kokoroReady = false;
   /** True while Síle is talking (or just finished) — mic frames are discarded. */
   private muted = false;
+  /** Bumped on every speak()/stopSpeaking() — async premium-TTS fetches and
+   *  grace-period unmutes check it so a barge-in can never be talked over. */
+  private speakGen = 0;
 
   constructor(callbacks: SileVoiceCallbacks) {
     this.callbacks = callbacks;
@@ -229,22 +236,68 @@ export class SileVoice {
   /** Speak a reply. Mutes the mic while she talks so she never hears herself. */
   speak(text: string) {
     this.muted = true;
+    this.speakGen++;
+    if (premiumVoiceEnabled()) {
+      void this.speakWithPremiumVoice(text);
+      return;
+    }
     if (this.osVoiceFallback || !this.kokoroReady) {
       this.speakWithOsVoice(text);
       return;
     }
+    this.speakViaKokoro(text);
+  }
+
+  /** Existing worker path — Kokoro streams sentence chunks from the worker. */
+  private speakViaKokoro(text: string) {
     const reqId = ++this.reqCounter;
+    const gen = this.speakGen;
     this.setState('speaking');
     this.worker.postMessage({ type: 'speak', reqId, text });
     // If the worker TTS silently never produces audio, clear the state;
     // a watchdog keeps the UI honest.
     window.setTimeout(() => {
-      if (this.state === 'speaking' && this.speakQueue.length === 0 && !this.currentSource) this.setState('idle');
+      if (gen === this.speakGen && this.state === 'speaking' && this.speakQueue.length === 0 && !this.currentSource) this.setState('idle');
+    }, 3000);
+  }
+
+  /** ElevenLabs path (feature-flagged): the first sentence chunk starts
+   *  playing while later chunks are still downloading — same pipelining as
+   *  the Kokoro path. Any failure degrades to the on-device stack silently. */
+  private async speakWithPremiumVoice(text: string) {
+    const gen = this.speakGen;
+    this.stopSpeaking(); // clear anything mid-flight (also bumps speakGen)
+    if (gen !== this.speakGen) return; // superseded before we started
+    this.muted = true;
+    this.setState('speaking');
+
+    let premiumOk = false;
+    for (const chunk of chunkForTts(text)) {
+      const audio = await fetchPremiumChunk(chunk);
+      if (gen !== this.speakGen) return; // barge-in / new utterance won
+      if (!audio) break;
+      premiumOk = true;
+      this.speakQueue.push({ wav: audio, sampleRate: 44100 }); // decodeAudioData sniffs MP3
+      void this.playNextChunk();
+    }
+    if (!premiumOk) {
+      // No ElevenLabs audio at all (no key, offline, 5xx) — on-device stack.
+      if (this.osVoiceFallback || !this.kokoroReady) {
+        this.speakWithOsVoice(text);
+        return;
+      }
+      this.speakViaKokoro(text);
+      return;
+    }
+    // Watchdog, same as the Kokoro path.
+    window.setTimeout(() => {
+      if (gen === this.speakGen && this.state === 'speaking' && this.speakQueue.length === 0 && !this.currentSource) this.setState('idle');
     }, 3000);
   }
 
   stopSpeaking() {
     this.speakQueue = [];
+    this.speakGen++; // invalidate pending premium fetches + grace unmutes
     this.muted = false;
     if (this.currentSource) {
       try {
@@ -269,12 +322,15 @@ export class SileVoice {
     const buffer = await this.playbackContext.decodeAudioData(chunk.wav.slice(0));
     const source = this.playbackContext.createBufferSource();
     source.buffer = buffer;
+    const gen = this.speakGen;
     source.onended = () => {
       this.currentSource = null;
       if (this.speakQueue.length) void this.playNextChunk();
       else {
-        // Brief grace period so speaker tail-off never reaches the mic.
+        // Brief grace period so speaker tail-off never reaches the mic —
+        // cancelled if a newer utterance or barge-in superseded this one.
         window.setTimeout(() => {
+          if (gen !== this.speakGen) return;
           this.muted = false;
           if (this.state === 'speaking') this.setState('idle');
         }, 300);
@@ -288,6 +344,7 @@ export class SileVoice {
   private speakWithOsVoice(text: string) {
     if (!('speechSynthesis' in window)) return;
     this.stopSpeaking();
+    const gen = this.speakGen;
     this.setState('speaking');
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.02;
@@ -295,6 +352,7 @@ export class SileVoice {
     if (cachedOsVoice) utterance.voice = cachedOsVoice;
     const done = () => {
       window.setTimeout(() => {
+        if (gen !== this.speakGen) return;
         this.muted = false;
         if (this.state === 'speaking') this.setState('idle');
       }, 300);

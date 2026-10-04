@@ -26,6 +26,7 @@ export default function SettingsPage() {
   const [googleError, setGoogleError] = useState('');
   const [exportStatus, setExportStatus] = useState('');
   const [sileChat, setSileChat] = useFeatureFlag('sileChat');
+  const [silePremiumVoice, setSilePremiumVoice] = useFeatureFlag('silePremiumVoice');
   const me = state.staff.find((member) => member.id === auth.staff?.id) ?? auth.staff ?? state.staff.find((member) => member.id === state.session?.staffId);
   const googleFlag = new URLSearchParams(window.location.search).get('google');
 
@@ -115,6 +116,18 @@ export default function SettingsPage() {
             {!canManagePractice(me?.role) && (
               <p className="text-[11px] text-slate-400">This setting affects the practice's AI spend — only the GP or practice manager can change it.</p>
             )}
+          </div>
+          <div className="surface max-w-lg space-y-3 rounded-xl p-4">
+            <div className="text-sm font-semibold">Síle AI — premium voice (testing)</div>
+            <p className="text-[12px] text-slate-600">
+              Replaces Síle's on-device voice with a natural-sounding ElevenLabs voice (spoken replies are synthesised
+              server-side; the key never reaches the browser). Uses a small per-character fee, metered under the same
+              monthly AI cap. Falls back to the on-device voice automatically if the premium service is unavailable.
+            </p>
+            <label className="flex items-center gap-2 text-xs text-slate-700">
+              <input type="checkbox" checked={silePremiumVoice} onChange={(e) => setSilePremiumVoice(e.target.checked)} />
+              Enable premium voice (ElevenLabs) — testing
+            </label>
           </div>
           <div className="surface max-w-lg space-y-3 rounded-xl p-4">
             <div className="text-sm font-semibold">Google Calendar</div>
