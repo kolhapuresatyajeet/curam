@@ -3,7 +3,7 @@ import { useLocation } from 'wouter';
 import { useAppState } from '@/stores/appStore';
 import { patientName } from '@/types/domain';
 import VoiceChat, { type SilePatientContext } from '@/components/sile/VoiceChat';
-import { setVoiceWidgetOpen, useVoiceWidgetState } from '@/components/sile/voiceWidget';
+import { openVoiceWidget, setVoiceWidgetOpen, useVoiceWidgetState } from '@/components/sile/voiceWidget';
 
 /**
  * Global "Talk to Síle" voice widget — mounted ONCE in the app shell so the
@@ -34,7 +34,7 @@ export default function SileVoiceWidget() {
         <button
           type="button"
           aria-label="Talk to Síle"
-          onClick={() => setOpen(true)}
+          onClick={() => openVoiceWidget()}
           className="fixed bottom-[4.75rem] right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-purple-700 text-white shadow-lg transition hover:bg-purple-800"
         >
           <Mic size={19} />
