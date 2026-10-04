@@ -6,7 +6,7 @@ import { useAppState } from '@/stores/appStore';
 import { patientName } from '@/types/domain';
 import { executeSileCommand } from '@/lib/sile/intents';
 import { chatWithSile } from '@/lib/sile-chat';
-import { deviceBrainPrompt } from '@/lib/sile/device-brain';
+import { deviceBrainPrompt, deviceBrainStatus, type DeviceBrainStatus } from '@/lib/sile/device-brain';
 import { SileVoice, type SileVoiceState } from '@/lib/sile/voice';
 
 type ChatEntry = { role: 'user' | 'sile'; text: string; at: string };
@@ -38,6 +38,8 @@ export default function VoiceChat() {
   const [listening, setListening] = useState(false);
   /** No GPU adapter on this device → Síle will always be on the slow path. */
   const [gpuUnavailable, setGpuUnavailable] = useState(false);
+  /** Chrome's built-in Nano brain — 'available' means on-device answers are live. */
+  const [brainStatus, setBrainStatus] = useState<DeviceBrainStatus | null>(null);
 
   const voiceRef = useRef<SileVoice | null>(null);
   const stateRef = useRef(state);
@@ -66,6 +68,17 @@ export default function VoiceChat() {
       } catch {
         if (!cancelled) setGpuUnavailable(true);
       }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const status = await deviceBrainStatus();
+      if (!cancelled) setBrainStatus(status);
     })();
     return () => {
       cancelled = true;
@@ -184,6 +197,7 @@ export default function VoiceChat() {
               {STATE_LABEL[voiceState]}
               {modelInfo?.sttDevice ? ` · ears: ${modelInfo.sttDevice}` : ''}
               {modelInfo ? ` · voice: ${modelInfo.ttsFallback ? 'browser' : 'Kokoro'}` : ''}
+              {brainStatus ? ` · brain: ${brainStatus === 'available' ? 'on-device' : 'server'}` : ''}
             </p>
           </div>
         </div>

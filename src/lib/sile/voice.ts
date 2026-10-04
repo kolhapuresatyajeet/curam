@@ -25,6 +25,25 @@ const MIN_SPEECH_MS = 400; // ignore clicks/breath
 const MAX_UTTERANCE_MS = 15_000;
 const RMS_THRESHOLD = 0.012; // mic noise floor gate
 
+// OS-voice fallback — picked ONCE and cached so the browser voice never
+// changes between commands (getVoices() populates asynchronously, and
+// re-picking per utterance made the voice jump mid-conversation).
+let cachedOsVoice: SpeechSynthesisVoice | null = null;
+
+function pickOsVoice(): SpeechSynthesisVoice | null {
+  if (!('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices.length) return null;
+  return voices.find((v) => /en-(IE|GB)/i.test(v.lang)) ?? voices.find((v) => v.lang.startsWith('en')) ?? null;
+}
+
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  cachedOsVoice = pickOsVoice();
+  window.speechSynthesis.onvoiceschanged = () => {
+    cachedOsVoice = cachedOsVoice ?? pickOsVoice();
+  };
+}
+
 type QueuedSpeech = { wav: ArrayBuffer; sampleRate: number };
 
 export class SileVoice {
@@ -272,10 +291,8 @@ export class SileVoice {
     this.setState('speaking');
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.02;
-    // Prefer a natural English voice if the OS has one.
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find((v) => /en-(IE|GB)/i.test(v.lang)) ?? voices.find((v) => v.lang.startsWith('en'));
-    if (preferred) utterance.voice = preferred;
+    // Same cached voice every time — stable identity across commands.
+    if (cachedOsVoice) utterance.voice = cachedOsVoice;
     const done = () => {
       window.setTimeout(() => {
         this.muted = false;
