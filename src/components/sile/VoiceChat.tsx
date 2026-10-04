@@ -71,7 +71,7 @@ const STATE_LABEL: Record<SileVoiceState, string> = {
 };
 
 /** Síle conversation panel: on-device voice loop + local intents + server brain. */
-export default function VoiceChat({ patientContext, hidden }: { patientContext?: SilePatientContext; hidden?: boolean }) {
+export default function VoiceChat({ patientContext, hidden, listenToken = 0 }: { patientContext?: SilePatientContext; hidden?: boolean; listenToken?: number }) {
   const state = useAppState();
   const [, setLocation] = useLocation();
   const [log, setLog] = useState<ChatEntry[]>([]);
@@ -80,6 +80,8 @@ export default function VoiceChat({ patientContext, hidden }: { patientContext?:
   const [error, setError] = useState<string | null>(null);
   const [modelInfo, setModelInfo] = useState<{ sttDevice?: string; ttsDevice?: string; ttsFallback: boolean } | null>(null);
   const [listening, setListening] = useState(false);
+  /** Mirror of `listening` for effects that must not depend on render order. */
+  const listeningRef = useRef(false);
   /** No GPU adapter on this device → Síle will always be on the slow path. */
   const [gpuUnavailable, setGpuUnavailable] = useState(false);
   /** Chrome's built-in Nano brain — 'available' means on-device answers are live. */
@@ -139,7 +141,10 @@ export default function VoiceChat({ patientContext, hidden }: { patientContext?:
       onTranscript: (text) => runCommandRef.current(text, 'voice'),
       onModelInfo: setModelInfo,
       onError: (message) => setError(`${message} — voice may be unavailable on this device; the typed box below always works.`),
-      onListeningChange: setListening,
+      onListeningChange: (value) => {
+        listeningRef.current = value;
+        setListening(value);
+      },
     });
     voiceRef.current = voice;
     return () => {
@@ -161,6 +166,18 @@ export default function VoiceChat({ patientContext, hidden }: { patientContext?:
       voiceRef.current?.stopSpeaking();
     }
   }, [hidden]);
+
+  // Auto-listen: opening the widget via the FAB bumps listenToken — start the
+  // mic straight away so the GP talks on the first tap, not the second.
+  useEffect(() => {
+    if (hidden || !listenToken || listeningRef.current) return;
+    const voice = voiceRef.current;
+    if (!voice) return;
+    voice.stopSpeaking(); // barge-in safe
+    voice
+      .startListening()
+      .catch((micError) => setError(`Microphone unavailable: ${String(micError)}`));
+  }, [listenToken, hidden]);
 
   const runCommand = useCallback(
     async (text: string, source: 'voice' | 'typed') => {

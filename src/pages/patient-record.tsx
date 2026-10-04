@@ -63,7 +63,7 @@ export default function PatientRecordPage() {
       {tab === 'Summary' && (
         <button
           type="button"
-          onClick={openVoiceWidget}
+          onClick={() => openVoiceWidget()}
           className="mt-3 flex w-full items-center gap-2 rounded-xl border border-purple-200 bg-purple-50/60 px-4 py-2.5 text-left text-[12px] text-purple-800 transition hover:bg-purple-100"
         >
           <Mic size={14} />

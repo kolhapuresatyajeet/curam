@@ -3,17 +3,20 @@ import { useLocation } from 'wouter';
 import { useAppState } from '@/stores/appStore';
 import { patientName } from '@/types/domain';
 import VoiceChat, { type SilePatientContext } from '@/components/sile/VoiceChat';
-import { useVoiceWidgetOpen } from '@/components/sile/voiceWidget';
+import { setVoiceWidgetOpen, useVoiceWidgetState } from '@/components/sile/voiceWidget';
 
 /**
  * Global "Talk to Síle" voice widget — mounted ONCE in the app shell so the
  * conversation, the on-device models and the mic survive navigation (e.g. Síle
  * opening a patient record mid-command, then briefing on them from there).
  * The modal is kept mounted (hidden with CSS, not unmounted) so the chat log
- * persists; closing it stops the mic and playback for privacy.
+ * persists; closing it stops the mic and playback for privacy. Opening it
+ * starts the mic straight away — one tap and you're talking.
  */
 export default function SileVoiceWidget() {
-  const [open, setOpen] = useVoiceWidgetOpen();
+  const widget = useVoiceWidgetState();
+  const open = widget.open;
+  const setOpen = (next: boolean) => setVoiceWidgetOpen(next);
   const state = useAppState();
   const [location] = useLocation();
 
@@ -64,7 +67,7 @@ export default function SileVoiceWidget() {
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <VoiceChat patientContext={patientContext} hidden={!open} />
+          <VoiceChat patientContext={patientContext} hidden={!open} listenToken={widget.listenPulse} />
         </div>
       </div>
     </>

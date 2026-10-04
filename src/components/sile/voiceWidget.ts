@@ -1,19 +1,23 @@
 import { useSyncExternalStore } from 'react';
 
 /**
- * Shared open/close state for the global Síle voice widget, so any page can
- * pop it open without prop-drilling through the app shell.
+ * Shared state for the global Síle voice widget, so any page can pop it open
+ * without prop-drilling through the app shell. `listenPulse` increments each
+ * time the widget is opened with auto-listen — VoiceChat watches it and starts
+ * the mic straight away (one less tap for the GP).
  */
-let open = false;
+export type VoiceWidgetState = { open: boolean; listenPulse: number };
+
+let widgetState: VoiceWidgetState = { open: false, listenPulse: 0 };
 const listeners = new Set<() => void>();
 
-export function openVoiceWidget() {
-  open = true;
+export function openVoiceWidget(autoListen = true) {
+  widgetState = { open: true, listenPulse: widgetState.listenPulse + (autoListen ? 1 : 0) };
   listeners.forEach((listener) => listener());
 }
 
 export function setVoiceWidgetOpen(next: boolean) {
-  open = next;
+  widgetState = { ...widgetState, open: next };
   listeners.forEach((listener) => listener());
 }
 
@@ -22,7 +26,6 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener);
 }
 
-export function useVoiceWidgetOpen(): [boolean, (next: boolean) => void] {
-  const value = useSyncExternalStore(subscribe, () => open);
-  return [value, setVoiceWidgetOpen];
+export function useVoiceWidgetState(): VoiceWidgetState {
+  return useSyncExternalStore(subscribe, () => widgetState);
 }
