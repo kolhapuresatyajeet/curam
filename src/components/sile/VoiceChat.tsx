@@ -6,10 +6,14 @@ import { useAppState } from '@/stores/appStore';
 import { patientName } from '@/types/domain';
 import { executeSileCommand } from '@/lib/sile/intents';
 import { chatWithSile } from '@/lib/sile-chat';
+import { askSileCommand } from '@/lib/sile-command';
 import { deviceBrainPrompt, deviceBrainStatus, type DeviceBrainStatus } from '@/lib/sile/device-brain';
 import { SileVoice, type SileVoiceState } from '@/lib/sile/voice';
 
 type ChatEntry = { role: 'user' | 'sile'; text: string; at: string };
+
+/** Patient context when Síle is embedded on a patient's record page. */
+export type SilePatientContext = { patientId: string; patientName: string };
 
 const CHIP_COMMANDS = (firstPatient?: string) => [
   'Read me my day',
@@ -17,6 +21,44 @@ const CHIP_COMMANDS = (firstPatient?: string) => [
   'Open patients',
   ...(firstPatient ? [`Open ${firstPatient}`, `What did we decide last time for ${firstPatient}?`] : []),
 ];
+
+const PATIENT_CHIPS = (name: string) => [`Brief me on ${name}`, `Show ${name}'s labs`, `What did we decide last time for ${name}?`];
+
+const FREQUENT_KEY = 'sile-frequent-commands-v1';
+
+/** Bump a local usage counter so the GP's habitual commands surface as chips. */
+function noteFrequentCommand(text: string) {
+  try {
+    const raw = localStorage.getItem(FREQUENT_KEY);
+    const counts = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+    // Normalise: drop patient names and filler words — store the command shape.
+    const shape = text
+      .toLowerCase()
+      .replace(/(?:for|open|show|about)\s+[a-z'’-]+(?:\s+[a-z'’-]+)?/i, '…')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!shape || shape === '…') return;
+    counts[shape] = (counts[shape] ?? 0) + 1;
+    localStorage.setItem(FREQUENT_KEY, JSON.stringify(counts));
+  } catch {
+    /* storage unavailable — chips stay static */
+  }
+}
+
+function topFrequentCommands(min: number): string[] {
+  try {
+    const raw = localStorage.getItem(FREQUENT_KEY);
+    if (!raw) return [];
+    const counts = JSON.parse(raw) as Record<string, number>;
+    return Object.entries(counts)
+      .filter(([, count]) => count >= min)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([shape]) => shape);
+  } catch {
+    return [];
+  }
+}
 
 const STATE_LABEL: Record<SileVoiceState, string> = {
   idle: 'Tap the mic and speak — or type below',
@@ -26,8 +68,8 @@ const STATE_LABEL: Record<SileVoiceState, string> = {
   speaking: 'Síle is speaking…',
 };
 
-/** Phase-1 Síle conversation panel: on-device voice loop + local intents. */
-export default function VoiceChat() {
+/** Síle conversation panel: on-device voice loop + local intents + server brain. */
+export default function VoiceChat({ patientContext }: { patientContext?: SilePatientContext }) {
   const state = useAppState();
   const [, setLocation] = useLocation();
   const [log, setLog] = useState<ChatEntry[]>([]);
@@ -46,6 +88,8 @@ export default function VoiceChat() {
   stateRef.current = state;
   const logRef = useRef<HTMLDivElement | null>(null);
   const runCommandRef = useRef<(text: string, source: 'voice' | 'typed') => Promise<void>>(async () => {});
+  const patientContextRef = useRef<SilePatientContext | undefined>(patientContext);
+  patientContextRef.current = patientContext;
 
   const pushEntry = useCallback((entry: ChatEntry) => {
     setLog((current) => [...current, entry]);
@@ -110,32 +154,45 @@ export default function VoiceChat() {
       const trimmed = text.trim();
       if (!trimmed) return;
       pushEntry({ role: 'user', text: trimmed, at: new Date().toISOString() });
-      const result = executeSileCommand(trimmed, stateRef.current);
+      const result = executeSileCommand(trimmed, stateRef.current, patientContextRef.current);
       let reply = result.reply;
       if (result.navigate) setLocation(result.navigate);
       if (result.matched) {
         pushEntry({ role: 'sile', text: reply, at: new Date().toISOString() });
+        noteFrequentCommand(trimmed);
       } else {
-        // Local brain didn't match — prefer the on-device model (Chrome's
-        // built-in Gemini Nano: free, private, offline) when present, then
-        // the server chat (Claude, EU); final fallback is the local reply.
+        // Local brain didn't match. Chain of brains, each degrading gracefully:
+        // 1) sile-command — Claude with live, RLS-scoped practice data (records,
+        //    labs, appointments); 2) Chrome's on-device Nano (free, offline,
+        //    general knowledge only); 3) sile-chat (Claude, no tools);
+        // 4) the local "didn't catch" reply.
         pushEntry({ role: 'sile', text: '…thinking', at: new Date().toISOString() });
-        let answeredLocally = false;
-        try {
-          const deviceReply = await deviceBrainPrompt(trimmed);
-          if (deviceReply) {
-            reply = deviceReply;
-            answeredLocally = true;
-          }
-        } catch {
-          /* fall through to server */
+        let answered = false;
+        const cmd = await askSileCommand(trimmed);
+        if (cmd.ok && cmd.reply) {
+          reply = cmd.reply;
+          answered = true;
         }
-        if (!answeredLocally) {
+        if (!answered) {
+          try {
+            const deviceReply = await deviceBrainPrompt(trimmed);
+            if (deviceReply) {
+              reply = deviceReply;
+              answered = true;
+            }
+          } catch {
+            /* fall through */
+          }
+        }
+        if (!answered) {
           const history = log
             .slice(-8)
             .map((entry) => ({ role: entry.role === 'user' ? ('user' as const) : ('assistant' as const), content: entry.text }));
           const chat = await chatWithSile(history, { route: 'sile' });
-          reply = chat.ok ? chat.reply : result.reply;
+          if (chat.ok && chat.reply) {
+            reply = chat.reply;
+            answered = true;
+          }
           if (!chat.ok && chat.error) setError(chat.error);
         }
         setLog((current) => {
@@ -176,9 +233,12 @@ export default function VoiceChat() {
   }, [runCommand, typed]);
 
   const chips = useMemo(() => {
+    if (patientContext) return PATIENT_CHIPS(patientContext.patientName);
+    const frequent = topFrequentCommands(2);
     const first = state.patients[0] ? patientName(state.patients[0]) : undefined;
-    return CHIP_COMMANDS(first);
-  }, [state.patients]);
+    const defaults = CHIP_COMMANDS(first);
+    return [...frequent.filter((f) => !defaults.some((d) => d.toLowerCase().startsWith(f.split('…')[0]))), ...defaults].slice(0, 6);
+  }, [patientContext, state.patients]);
 
   const busy = voiceState === 'transcribing';
   const speaking = voiceState === 'speaking';

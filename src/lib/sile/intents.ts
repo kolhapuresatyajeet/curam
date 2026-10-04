@@ -139,12 +139,42 @@ function lastVisitReply(patient: PracticeState['patients'][number], state: Pract
   return `At ${patientName(patient)}'s last visit on ${when}: ${body}`;
 }
 
+export type SilePatientContext = { patientId: string; patientName: string };
+
 /**
  * Execute a spoken or typed Síle command against local state.
- * Returns the spoken reply and an optional route to navigate to.
+ * `patientContext` is set when Síle is embedded on a patient's record —
+ * "this patient" / "their labs" then refer to them.
  */
-export function executeSileCommand(rawText: string, state: PracticeState): SileCommandResult {
+export function executeSileCommand(
+  rawText: string,
+  state: PracticeState,
+  patientContext?: SilePatientContext,
+): SileCommandResult {
   const text = normalise(rawText);
+
+  // Patient-scoped commands (Síle embedded on a record page).
+  if (patientContext) {
+    const ctxPatient = state.patients.find((p) => p.id === patientContext.patientId);
+    if (ctxPatient) {
+      const asksBrief = /\b(brief|overview|summar|on this patient|this patient)\b/.test(text) || /^brief me$/.test(text.trim());
+      const asksLabs = /\b(labs?|results?|bloods?|reports?)\b/.test(text) && !/\b(last visit|decide)\b/.test(text);
+      const asksVisit = /\b(last visit|last time|decide|previous consultation)\b/.test(text);
+      if (asksBrief) {
+        const brief = lastVisitReply(ctxPatient, state);
+        const labs = state.labResults.filter((r) => r.patientId === ctxPatient.id && !r.gpReviewed);
+        const abnormal = labs.filter((r) => r.abnormalFlags.length > 0).length;
+        const extra = abnormal
+          ? ` ${abnormal} abnormal result${abnormal === 1 ? '' : 's'} held for your review.`
+          : labs.length
+            ? ' Their latest results are normal and awaiting your review.'
+            : ' No pending results.';
+        return { reply: `${brief}.${extra}`, navigate: `/patients/${ctxPatient.id}`, matched: true };
+      }
+      if (asksVisit) return { reply: lastVisitReply(ctxPatient, state), navigate: `/patients/${ctxPatient.id}`, matched: true };
+      if (asksLabs) return { reply: labsArrivedReply(ctxPatient, state), navigate: `/patients/${ctxPatient.id}`, matched: true };
+    }
+  }
 
   // Briefing — the daily workhorse.
   if (/\b(read (my|me my) day|brief me|briefing|my day|good (morning|afternoon|evening) sile)\b/.test(text)) {

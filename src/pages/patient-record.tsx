@@ -7,6 +7,7 @@ import { templateLabel } from '@/lib/consultation-templates';
 import { canManagePractice } from '@/lib/roles';
 import { exportPatientHistoryCsv, exportPatientRecord } from '@/lib/export';
 import { patientName, type ConsultationTemplate } from '@/types/domain';
+import VoiceChat from '@/components/sile/VoiceChat';
 
 const TABS = ['Summary', 'Timeline', 'Consultation', 'Prescriptions', 'Results', 'Referrals', 'CDM', 'Vaccines', 'Documents'];
 
@@ -59,7 +60,11 @@ export default function PatientRecordPage() {
       <Tabs items={TABS} value={tab} onChange={setTab} />
 
       {tab === 'Summary' && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <VoiceChat patientContext={{ patientId: patient.id, patientName: patientName(patient) }} />
+      )}
+
+      {tab === 'Summary' && (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
           {[
             ['Address', `${patient.address}, ${patient.eircode}`],
             ['Pharmacy', `${patient.pharmacyName} · ${patient.pharmacyHealthmail}`],
