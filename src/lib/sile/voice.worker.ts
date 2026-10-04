@@ -23,12 +23,48 @@ export type WorkerOutbound =
   | { type: 'speech-done'; reqId: number }
   | { type: 'error'; scope: 'stt' | 'tts'; message: string };
 
+const SAMPLE_RATE = 16_000;
+/** ~0.2 s — an utterance shorter than this after silence-trim is a click, not speech. */
+const MIN_UTTERANCE_SAMPLES = SAMPLE_RATE * 0.2;
+
 const post = (msg: WorkerOutbound, transfer?: Transferable[]) =>
   (self as unknown as DedicatedWorkerGlobalScope).postMessage(msg, transfer ?? []);
 
 let asr: AutomaticSpeechRecognitionPipeline | null = null;
 let tts: KokoroTTS | null = null;
 let ready = false;
+
+const SILENCE_RMS = 0.012; // same noise-floor gate as the main-thread capture
+
+/** Trim leading/trailing near-silence. Trailing dead air is the main trigger
+ *  of Whisper's repetition loops ("read my day" → "read my deep deep deep…"). */
+function trimSilence(pcm: Float32Array): Float32Array {
+  const frame = 4096; // ~256 ms at 16 kHz
+  const rmsOf = (from: number, to: number) => {
+    const n = Math.min(frame, to - from);
+    if (n <= 0) return 0;
+    let sum = 0;
+    for (let i = from; i < from + n; i++) sum += pcm[i] * pcm[i];
+    return Math.sqrt(sum / n);
+  };
+  let start = 0;
+  let end = pcm.length;
+  while (start < end && rmsOf(start, start + frame) < SILENCE_RMS) start += frame;
+  while (end > start && rmsOf(Math.max(start, end - frame), end) < SILENCE_RMS) end -= Math.min(frame, end - start);
+  return pcm.slice(start, end);
+}
+
+/** Cap any run of the same word at `maxRun` — a repetition loop can then never
+ *  dominate the transcript ("deep deep deep…" → at most "deep deep"). */
+function collapseRepeats(text: string, maxRun = 2): string {
+  const out: string[] = [];
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const norm = word.toLowerCase();
+    if (out.length >= maxRun && out.slice(-maxRun).every((w) => w.toLowerCase() === norm)) continue;
+    out.push(word);
+  }
+  return out.join(' ');
+}
 
 /** Encode Float32 PCM as a 16-bit WAV ArrayBuffer (transferred to the main thread). */
 function encodeWav(samples: Float32Array, sampleRate: number): ArrayBuffer {
@@ -131,10 +167,18 @@ async function initTts(): Promise<string> {
 
 async function handleTranscribe(reqId: number, pcm: Float32Array) {
   if (!asr) throw new Error('STT not initialised');
+  // Three defences against Whisper's repetition loops on short/noisy input:
+  // trim dead air, forbid n-gram repeats in generation, collapse any loop
+  // that still gets through before it reaches the intent brain.
+  const audio = trimSilence(pcm);
+  if (audio.length < MIN_UTTERANCE_SAMPLES) {
+    post({ type: 'transcript', reqId, text: '' });
+    return;
+  }
   // Whisper runs at 16 kHz mono — exactly what the engine captures.
-  const output = await asr(pcm, { language: 'en', task: 'transcribe' });
-  const text = (Array.isArray(output) ? output[0]?.text : output?.text) ?? '';
-  post({ type: 'transcript', reqId, text: text.trim() });
+  const output = await asr(audio, { language: 'en', task: 'transcribe', no_repeat_ngram_size: 4 });
+  const raw = (Array.isArray(output) ? output[0]?.text : output?.text) ?? '';
+  post({ type: 'transcript', reqId, text: collapseRepeats(raw.trim()) });
 }
 
 let speakSeq = 0;
