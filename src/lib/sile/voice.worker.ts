@@ -8,7 +8,7 @@
 // Audio never leaves the device — the worker only ever sees Float32 PCM.
 
 import { pipeline, type AutomaticSpeechRecognitionPipeline } from '@huggingface/transformers';
-import { KokoroTTS, TextSplitterStream } from 'kokoro-js';
+import { KokoroTTS } from 'kokoro-js';
 
 export type WorkerInbound =
   | { type: 'init' }
@@ -138,19 +138,43 @@ async function handleTranscribe(reqId: number, pcm: Float32Array) {
 }
 
 let speakSeq = 0;
+/** Group remainder sentences into ~280-char chunks: fewer playback boundaries
+ *  means fewer gaps, and each chunk generates while the previous one plays. */
+function groupIntoChunks(text: string): string[] {
+  const sentences = text.match(/[^.!?]+[.!?]+(\s|$)/g) ?? [text];
+  const chunks: string[] = [];
+  let current = '';
+  for (const sentence of sentences) {
+    if (current && (current + sentence).length > 280) {
+      chunks.push(current.trim());
+      current = '';
+    }
+    current += sentence;
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}
+
 async function handleSpeak(reqId: number, text: string) {
   if (!tts) throw new Error('TTS not initialised');
   const seq = ++speakSeq;
-  const splitter = new TextSplitterStream();
-  const stream = tts.stream(splitter, { voice: 'af_heart', speed: 1.02 });
-  // Feed the whole reply, then close — the stream yields one chunk per
-  // sentence so playback can start before generation finishes.
-  splitter.push(text);
-  splitter.close();
-  let sent = 0;
-  for await (const chunk of stream) {
-    const wav = encodeWav(chunk.audio.audio as Float32Array, chunk.audio.sampling_rate);
-    post({ type: 'speech', reqId, seq: sent++, wav, sampleRate: chunk.audio.sampling_rate }, [wav]);
+  const voiceOpts = { voice: 'af_heart' as const, speed: 1.02 };
+
+  // First sentence generates alone and ships immediately — audio starts fast.
+  const firstMatch = text.match(/^.*?[.!?]+(\s|$)/);
+  const first = (firstMatch ? firstMatch[0] : text).trim();
+  const rest = firstMatch ? text.slice(firstMatch[0].length).trim() : '';
+
+  const firstAudio = await tts.generate(first, voiceOpts);
+  const firstWav = encodeWav(firstAudio.audio as Float32Array, firstAudio.sampling_rate);
+  post({ type: 'speech', reqId, seq: 0, wav: firstWav, sampleRate: firstAudio.sampling_rate }, [firstWav]);
+
+  // Remainder: grouped chunks, generated while earlier chunks are playing.
+  let chunkIndex = 1;
+  for (const chunk of groupIntoChunks(rest)) {
+    const audio = await tts.generate(chunk, voiceOpts);
+    const wav = encodeWav(audio.audio as Float32Array, audio.sampling_rate);
+    post({ type: 'speech', reqId, seq: chunkIndex++, wav, sampleRate: audio.sampling_rate }, [wav]);
   }
   post({ type: 'speech-done', reqId });
 }

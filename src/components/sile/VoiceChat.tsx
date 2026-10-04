@@ -6,6 +6,7 @@ import { useAppState } from '@/stores/appStore';
 import { patientName } from '@/types/domain';
 import { executeSileCommand } from '@/lib/sile/intents';
 import { chatWithSile } from '@/lib/sile-chat';
+import { deviceBrainPrompt } from '@/lib/sile/device-brain';
 import { SileVoice, type SileVoiceState } from '@/lib/sile/voice';
 
 type ChatEntry = { role: 'user' | 'sile'; text: string; at: string };
@@ -102,15 +103,28 @@ export default function VoiceChat() {
       if (result.matched) {
         pushEntry({ role: 'sile', text: reply, at: new Date().toISOString() });
       } else {
-        // Local brain didn't match — try the server chat (Claude, EU) with
-        // the recent conversation for context; fall back to the local reply.
+        // Local brain didn't match — prefer the on-device model (Chrome's
+        // built-in Gemini Nano: free, private, offline) when present, then
+        // the server chat (Claude, EU); final fallback is the local reply.
         pushEntry({ role: 'sile', text: '…thinking', at: new Date().toISOString() });
-        const history = log
-          .slice(-8)
-          .map((entry) => ({ role: entry.role === 'user' ? ('user' as const) : ('assistant' as const), content: entry.text }));
-        const chat = await chatWithSile(history, { route: 'sile' });
-        reply = chat.ok ? chat.reply : result.reply;
-        if (!chat.ok && chat.error) setError(chat.error);
+        let answeredLocally = false;
+        try {
+          const deviceReply = await deviceBrainPrompt(trimmed);
+          if (deviceReply) {
+            reply = deviceReply;
+            answeredLocally = true;
+          }
+        } catch {
+          /* fall through to server */
+        }
+        if (!answeredLocally) {
+          const history = log
+            .slice(-8)
+            .map((entry) => ({ role: entry.role === 'user' ? ('user' as const) : ('assistant' as const), content: entry.text }));
+          const chat = await chatWithSile(history, { route: 'sile' });
+          reply = chat.ok ? chat.reply : result.reply;
+          if (!chat.ok && chat.error) setError(chat.error);
+        }
         setLog((current) => {
           const next = [...current];
           const last = next[next.length - 1];
