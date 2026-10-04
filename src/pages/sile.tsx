@@ -5,6 +5,7 @@ import { useLocation } from 'wouter';
 import { patientName } from '@/types/domain';
 import { FileText, MessageCircle, Sparkles } from 'lucide-react';
 import { formatIrishDateTime } from '@/lib/utils';
+import VoiceChat from '@/components/sile/VoiceChat';
 
 /** Síle is Cúram's own GP-facing AI layer: briefing, drafts and (soon) chat.
  *  VoiceHub — its sister app — makes the patient phone calls; Síle surfaces
@@ -25,7 +26,7 @@ export default function SilePage() {
     <div className="fade-in">
       <SectionTitle
         title="Síle AI"
-        description="The practice's own AI assistant for the GP team — daily briefing, drafts and (soon) chat. VoiceHub, its sister app, handles patient phone calls; Síle surfaces those insights here. Everything needs human approval before it reaches a record."
+        description="The practice's own AI assistant for the GP team — daily briefing, drafts and voice chat. VoiceHub, its sister app, handles patient phone calls; Síle surfaces those insights here. Everything needs human approval before it reaches a record."
       />
       <Tabs items={['Briefing', 'Drafts', 'Chat']} value={tab} onChange={setTab} />
 
@@ -86,17 +87,7 @@ export default function SilePage() {
         </div>
       )}
 
-      {tab === 'Chat' && (
-        <div className="surface max-w-xl rounded-xl p-6 text-center">
-          <span className="icon-box icon-teal mx-auto">
-            <MessageCircle size={16} />
-          </span>
-          <h2 className="mt-3 text-sm font-semibold text-slate-800">Chat with Síle — coming soon</h2>
-          <p className="mt-1 text-[12px] leading-5 text-slate-600">
-            Ask about your day, a patient’s history or a draft. GP-supervised, audit-logged, and never auto-saved to a record.
-          </p>
-        </div>
-      )}
+      {tab === 'Chat' && <VoiceChat />}
     </div>
   );
 }
