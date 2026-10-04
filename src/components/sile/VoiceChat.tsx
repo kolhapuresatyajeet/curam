@@ -161,6 +161,16 @@ export default function VoiceChat() {
         </div>
       </div>
 
+      {/* Speed tip — only when she is on the battery-saving (non-GPU) path. */}
+      {modelInfo?.sttDevice && modelInfo.sttDevice !== 'webgpu' && (
+        <p className="border-b border-slate-100 bg-amber-50/60 px-4 py-2 text-[11px] leading-5 text-amber-800">
+          💡 Síle is running in her battery-saving mode — she works fine, just a little slower. To let her use your
+          computer's full speed: in Chrome open <strong>Settings → System</strong> and turn on{' '}
+          <strong>“Use graphics acceleration when available”</strong>, then restart Chrome. She switches to fast mode
+          automatically — no updates needed.
+        </p>
+      )}
+
       {/* Quick commands */}
       <div className="flex flex-wrap gap-2 border-b border-slate-100 px-4 py-3">
         {chips.map((chip) => (
