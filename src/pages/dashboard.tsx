@@ -31,6 +31,43 @@ const TYPE_LABEL: Record<string, string> = {
   vaccination: 'Vaccination',
 };
 
+const ONBOARDING_STEPS = ['details', 'voicehub', 'billing', 'team'];
+const ONBOARDING_LABEL: Record<string, string> = {
+  details: 'Practice details',
+  voicehub: 'AI receptionist',
+  billing: 'Choose a plan',
+  team: 'Invite your team',
+};
+
+/** "Finish setting up" card — gentle nudge until every onboarding step is done.
+ *  Never blocks any clinical work. */
+function OnboardingCard() {
+  const state = useAppState();
+  const [, setLocation] = useLocation();
+  const done = state.practice.onboardingDone ?? [];
+  const remaining = ONBOARDING_STEPS.filter((step) => !done.includes(step));
+  if (remaining.length === 0) return null;
+  const next = remaining[0];
+  return (
+    <button
+      type="button"
+      onClick={() => setLocation('/onboarding')}
+      className="surface mt-3 flex w-full items-center gap-3 rounded-xl border border-purple-200 bg-purple-50/60 px-4 py-3 text-left transition hover:bg-purple-100/60"
+    >
+      <span className="icon-box icon-purple">
+        <Sparkles size={15} />
+      </span>
+      <div className="flex-1">
+        <p className="text-sm font-semibold text-slate-800">Finish setting up Cúram</p>
+        <p className="text-[11px] text-slate-500">
+          {ONBOARDING_STEPS.length - remaining.length} of {ONBOARDING_STEPS.length} done · next up: {ONBOARDING_LABEL[next]}
+        </p>
+      </div>
+      <ChevronRight size={16} className="text-slate-400" />
+    </button>
+  );
+}
+
 export default function DashboardPage() {
   const state = useAppState();
   const staff = useSessionStaff();
@@ -46,8 +83,7 @@ export default function DashboardPage() {
       <SectionTitle
         eyebrow={state.practice.name}
         title={`Good morning, ${staff?.name.split(' ').slice(-1)[0] ?? ''}`}
-        description="Here’s the shape of the practice today."
-        action={
+        description="Here’s the shape of the practice today."        action={
           <div className="flex gap-2">
             <AppButton size="sm" icon={Plus} onClick={() => setLocation('/calendar')}>
               New appointment
@@ -58,6 +94,7 @@ export default function DashboardPage() {
           </div>
         }
       />
+      <OnboardingCard />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Appointments today" value={String(todays.length)} detail="Live from the practice diary" icon={CalendarDays} tone="blue" />
         <MetricCard
@@ -75,7 +112,7 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <div>
               <h2 className="text-sm font-semibold text-slate-800">Today’s appointments</h2>
-              <p className="mt-0.5 text-[11px] text-slate-400">{state.practice.hours}</p>
+              <p className="mt-0.5 text-[11px] text-slate-400">{state.practice.openingHours || 'Mon–Fri 09:00–17:00'}</p>
             </div>
           </div>
           <div className="divide-y divide-slate-100">

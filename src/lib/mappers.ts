@@ -26,6 +26,11 @@ export interface PracticeRow {
   healthmail: string | null;
   pcrs_reg: string | null;
   stripe_account_id: string | null;
+  opening_hours: string | null;
+  voicehub_agent_id: string | null;
+  voicehub_phone: string | null;
+  voicehub_connected_at: string | null;
+  onboarding_done: string[] | null;
 }
 
 export interface StaffRow {

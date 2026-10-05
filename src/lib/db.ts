@@ -108,8 +108,18 @@ export async function updateInvoicePayment(
   return { error };
 }
 
-/** Admin (gp/pm) onboards a staff member: DB row with user_id null until they sign in. */
-export async function inviteStaffMember(input: { practiceId: string; name: string; role: Staff['role']; email: string }) {
+/** Onboarding wizard: persist practice fields + which wizard steps are done.
+ *  Runs under normal RLS (staff can update their own practice row). */
+export async function savePracticeOnboarding(
+  practiceId: string,
+  patch: Partial<{ address: string; eircode: string; phone: string; opening_hours: string; voicehub_agent_id: string; voicehub_phone: string; voicehub_connected_at: string; onboarding_done: string[] }>,
+) {
+  if (!supabase) return { error: new Error('Supabase is not configured') };
+  const { error } = await supabase.from('practices').update(patch).eq('id', practiceId);
+  return { error };
+}
+
+/** Admin (gp/pm) onboards a staff member: DB row with user_id null until they sign in. */export async function inviteStaffMember(input: { practiceId: string; name: string; role: Staff['role']; email: string }) {
   if (!supabase) return { error: new Error('Supabase is not configured') };
   const { error } = await supabase.from('staff').insert({
     practice_id: input.practiceId,

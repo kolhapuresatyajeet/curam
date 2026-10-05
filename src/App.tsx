@@ -12,6 +12,7 @@ import PublicBookingPage from '@/pages/booking';
 import CalendarPage from '@/pages/calendar';
 import CdmPage from '@/pages/cdm';
 import ConsultationPage from '@/pages/consultation';
+import SetupWizard from '@/components/onboarding/SetupWizard';
 import DashboardPage from '@/pages/dashboard';
 import HealthLinkPage from '@/pages/healthlink';
 import InboxPage from '@/pages/inbox';
@@ -120,6 +121,11 @@ function Router() {
         <Route path="/referrals">
           <Authed>
             <ReferralsPage />
+          </Authed>
+        </Route>
+        <Route path="/onboarding">
+          <Authed>
+            <SetupWizard />
           </Authed>
         </Route>
         <Route path="/saas-admin">

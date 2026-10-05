@@ -14,7 +14,11 @@ export function createSeedState(): PracticeState {
       healthmail: 'riverside@healthmail.ie',
       pcrsReg: 'PCRS-88211',
       stripeAccountId: 'acct_demo_riverside',
-      hours: 'Mon–Fri 08:30–18:00',
+      openingHours: 'Mon–Fri 08:30–18:00',
+      voicehubAgentId: '',
+      voicehubPhone: '',
+      voicehubConnectedAt: null,
+      onboardingDone: ['details', 'voicehub', 'billing', 'team'],
     },
     session: { staffId: 'st_sarah', expiresAt: Date.now() + 30 * 60 * 1000 },
     staff: [

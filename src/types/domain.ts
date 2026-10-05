@@ -79,7 +79,11 @@ export interface Practice {
   healthmail: string;
   pcrsReg: string;
   stripeAccountId: string;
-  hours: string;
+  openingHours: string;
+  voicehubAgentId: string;
+  voicehubPhone: string;
+  voicehubConnectedAt: string | null;
+  onboardingDone: string[];
 }
 
 export interface Staff {

@@ -69,6 +69,11 @@ async function hydrate(
         healthmail: practice.healthmail ?? "",
         pcrsReg: practice.pcrs_reg ?? "",
         stripeAccountId: practice.stripe_account_id ?? "",
+        openingHours: practice.opening_hours ?? "",
+        voicehubAgentId: practice.voicehub_agent_id ?? "",
+        voicehubPhone: practice.voicehub_phone ?? "",
+        voicehubConnectedAt: practice.voicehub_connected_at ?? null,
+        onboardingDone: practice.onboarding_done ?? [],
       });
     }
     appStore.login(staff.id);
