@@ -14,7 +14,7 @@ export interface VoicehubProvisionResult {
   warning?: string;
 }
 
-export async function provisionVoicehub(phoneNumber?: string): Promise<{ data?: VoicehubProvisionResult; error?: Error }> {
+export async function provisionVoicehub(phoneNumber?: string, humanTransferNumber?: string): Promise<{ data?: VoicehubProvisionResult; error?: Error }> {
   if (!supabaseConfigured || !supabase) return { error: new Error('Needs the live (Supabase) deployment') };
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token;
@@ -22,7 +22,7 @@ export async function provisionVoicehub(phoneNumber?: string): Promise<{ data?: 
   const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL as string}/functions/v1/voicehub-provision`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phoneNumber: phoneNumber ?? null }),
+    body: JSON.stringify({ phoneNumber: phoneNumber ?? null, humanTransferNumber: humanTransferNumber ?? null }),
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) return { error: new Error(json.error ?? `Provisioning failed (HTTP ${res.status})`) };

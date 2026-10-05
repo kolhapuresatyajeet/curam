@@ -77,6 +77,11 @@ Deno.serve(async (req) => {
   const validNumber = /^\+?\d{9,15}$/.test(ownNumber) ? (ownNumber.startsWith('+') ? ownNumber : `+${ownNumber}`) : null;
   if (body.phoneNumber && !validNumber) return json({ error: 'Phone number looks invalid — use international format, e.g. +35312658834' }, 400);
 
+  // Optional: warm transfer-to-human target (any reachable phone).
+  const transferNumber = String(body.humanTransferNumber ?? '').replace(/[\s()-]/g, '');
+  const validTransfer = /^\+?\d{9,15}$/.test(transferNumber) ? (transferNumber.startsWith('+') ? transferNumber : `+${transferNumber}`) : null;
+  if (body.humanTransferNumber && !validTransfer) return json({ error: 'Transfer number looks invalid — use international format, e.g. +353861234567' }, 400);
+
   const payload = {
     practice: {
       name: practice.name,
@@ -87,6 +92,7 @@ Deno.serve(async (req) => {
       // VoiceHub buys a dedicated Irish number; the practice's existing
       // landline is never hijacked.
       phone_number: validNumber ?? undefined,
+      human_transfer_number: validTransfer ?? undefined,
       timezone: 'Europe/Dublin',
       opening_hour: opening,
       closing_hour: closing,
