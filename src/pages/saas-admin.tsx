@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'wouter';
 import { AppButton, SectionTitle, Tabs, inputClass } from '@/components/shared/ui';
 import { isPlatformAdmin } from '@/lib/support';
 import {
@@ -17,6 +18,7 @@ import { Ban, CheckCircle2, Plus } from 'lucide-react';
  *  platform_admin = true (Supabase auth metadata) can open it; codes never
  *  leave the Edge Function (the table has no RLS policies on purpose). */
 export default function SaasAdminPage() {
+  const [, setLocation] = useLocation();
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [tab, setTab] = useState('Codes');
   const [codes, setCodes] = useState<SaasCode[]>([]);
@@ -86,6 +88,9 @@ export default function SaasAdminPage() {
         title="SaaS admin"
         description="Cúram's own billing — €99/month or €990/year per practice. Free practices redeem an email-locked code: only a signup with that exact email can use it."
       />
+      <button type="button" className="mb-2 text-xs text-purple-700 underline" onClick={() => setLocation('/support')}>
+        ← Back to support console
+      </button>
       <Tabs items={['Codes', 'Redemptions', 'Practices']} value={tab} onChange={setTab} />
 
       {error && <p className="mb-3 text-[12px] text-[#b5443b]" role="alert">{error}</p>}

@@ -81,6 +81,11 @@ export default function SupportPage() {
   return (
     <div className="fade-in mx-auto max-w-3xl p-6">
       <SectionTitle title="Support console" description={`Platform admin: ${adminEmail}. Signing in opens a normal session as that staff member — RLS applies, and the practice's audit log records the support session.`} />
+      <div className="mb-4 flex gap-2">
+        <button type="button" className="text-xs font-medium text-purple-700 underline" onClick={() => setLocation('/saas-admin')}>
+          SaaS billing admin → manage free/discount codes
+        </button>
+      </div>
       <input className={`${inputClass} mb-4`} placeholder="Search staff or practice…" value={search} onChange={(e) => setSearch(e.target.value)} />
       {error && <p className="mb-3 text-xs text-red-600">{error}</p>}
       <div className="surface divide-y rounded-xl">
