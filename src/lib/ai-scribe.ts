@@ -37,48 +37,21 @@ export function draftSummaryFromTranscript(transcript: string): string {
 
 export type ScribeResult = {
   transcript: string;
+  dialogue?: string;
   draft: { subjective: string; objective: string; assessment: string; plan: string };
   codes: string[];
   summary: string;
 };
 
-/** Decode any browser recording (webm/opus, mp4/aac…) and re-encode as mono
- *  16 kHz 16-bit WAV — the one audio format every transcription path accepts. */
-async function blobToWav(blob: Blob): Promise<Blob> {
-  const decoded = await new AudioContext().decodeAudioData(await blob.arrayBuffer());
-  const rate = 16_000;
-  const offline = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * rate)), rate);
-  const source = offline.createBufferSource();
-  source.buffer = decoded;
-  source.connect(offline.destination);
-  source.start();
-  const rendered = await offline.startRendering();
-  const samples = rendered.getChannelData(0);
-
-  const buffer = new ArrayBuffer(44 + samples.length * 2);
-  const view = new DataView(buffer);
-  const writeStr = (offset: number, text: string) => {
-    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
-  };
-  writeStr(0, 'RIFF');
-  view.setUint32(4, 36 + samples.length * 2, true);
-  writeStr(8, 'WAVE');
-  writeStr(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true); // PCM
-  view.setUint16(22, 1, true); // mono
-  view.setUint32(24, rate, true);
-  view.setUint32(28, rate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeStr(36, 'data');
-  view.setUint32(40, samples.length * 2, true);
-  let offset = 44;
-  for (let i = 0; i < samples.length; i++, offset += 2) {
-    const clamped = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
-  }
-  return new Blob([buffer], { type: 'audio/wav' });
+/** Pick a filename whose extension matches the actual recording codec —
+ *  both transcription paths (OpenAI transcriptions + chat-model fallback)
+ *  accept webm/ogg/m4a natively, so no in-browser re-encoding is needed. */
+export function audioFilename(mime: string): string {
+  if (mime.includes('webm')) return 'consult.webm';
+  if (mime.includes('ogg')) return 'consult.ogg';
+  if (mime.includes('mp4') || mime.includes('aac')) return 'consult.m4a';
+  if (mime.includes('wav')) return 'consult.wav';
+  return 'consult.webm';
 }
 
 /** Calls the ai-scribe Edge Function with a recording and/or transcript. Returns null on failure. */
@@ -97,19 +70,10 @@ export async function structureSoapRemote(input: {
   let response: Response;
   if (input.audio) {
     const form = new FormData();
-    let audioBlob = input.audio;
-    let name = input.audioName ?? 'consult.webm';
-    if (!name.endsWith('.wav')) {
-      // Browsers record webm/opus (or mp4) — convert to WAV so the gateway
-      // always receives a universally accepted format.
-      try {
-        audioBlob = await blobToWav(input.audio);
-        name = 'consult.wav';
-      } catch {
-        /* conversion failed — upload the original and let the server try */
-      }
-    }
-    form.append('audio', audioBlob, name);
+    // Upload the original browser recording (webm/opus, mp4/aac…) as-is —
+    // every transcription path accepts these, and webm is ~10× smaller than
+    // the old WAV re-encode, lifting the practical recording-length ceiling.
+    form.append('audio', input.audio, input.audioName ?? 'consult.webm');
     form.append('patientId', input.patientId);
     if (input.transcript) form.append('transcript', input.transcript);
     response = await fetch(`${url}/functions/v1/ai-scribe`, {
@@ -130,9 +94,37 @@ export async function structureSoapRemote(input: {
     ok: true,
     result: {
       transcript: body.transcript ?? input.transcript ?? '',
+      dialogue: typeof body.dialogue === 'string' ? body.dialogue : '',
       draft: body.draft,
       codes: Array.isArray(body.codes) ? body.codes.map(String) : [],
       summary: typeof body.summary === 'string' ? body.summary : '',
     },
   };
+}
+
+/** Transcribe one recorded segment and return just its text (no structuring).
+ *  Used by the live transcript — segments stream in while the GP still talks. */
+export async function transcribeSegment(input: {
+  patientId: string;
+  audio: Blob;
+  audioName: string;
+}): Promise<{ ok: true; text: string } | { ok: false; error: string }> {
+  if (!supabaseConfigured || !supabase) return { ok: false, error: 'Supabase is not configured' };
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return { ok: false, error: 'Sign in first' };
+
+  const url = import.meta.env.VITE_SUPABASE_URL as string;
+  const form = new FormData();
+  form.append('audio', input.audio, input.audioName);
+  form.append('patientId', input.patientId);
+  form.append('mode', 'transcribe');
+  const response = await fetch(`${url}/functions/v1/ai-scribe`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) return { ok: false, error: body.error ?? `Transcription failed (HTTP ${response.status})` };
+  return { ok: true, text: body.transcript ?? '' };
 }

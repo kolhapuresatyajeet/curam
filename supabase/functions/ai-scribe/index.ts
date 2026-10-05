@@ -113,7 +113,7 @@ function patientContextBlock(patient: any, conditions: any[], medications: strin
   return lines.join('\n');
 }
 
-async function structureSoap(transcript: string, context: string): Promise<{ draft?: any; codes?: string[]; inputTokens?: number; outputTokens?: number; error?: string }> {
+async function structureSoap(transcript: string, context: string): Promise<{ draft?: any; codes?: string[]; inputTokens?: number; outputTokens?: number; dialogue?: string; error?: string }> {
   if (!LITELLM_BASE && !Deno.env.get('ANTHROPIC_API_KEY')) {
     return { error: 'Note structuring is not configured (set LITELLM_BASE_URL + LITELLM_API_KEY, or ANTHROPIC_API_KEY)' };
   }
@@ -122,7 +122,8 @@ async function structureSoap(transcript: string, context: string): Promise<{ dra
 Use only what is in the transcript and context. Never invent findings. Write in concise clinical English (Irish conventions: 999/112 for emergencies, dd/MM/yyyy dates).
 Also suggest 0-3 ICPC-2 codes (format "CODE Label") that match the assessment.
 Also write "summary": a 2-3 sentence plain-English summary of this consultation for the patient record (what brought the patient in, key findings, and the plan). Base it strictly on the transcript.
-Respond with JSON only: {"subjective": string, "objective": string, "assessment": string, "plan": string, "icpc2": string[], "summary": string}`;
+Also write "dialogue": the full transcript with each paragraph prefixed by its speaker — "Doctor:" or "Patient:" (use "Nurse:" when the context makes clear a nurse or other clinician is speaking). Infer speakers from content: examinations, histories, explanations and advice are usually the clinician; symptoms, personal details and agreement are usually the patient. Where the speaker is genuinely unclear, leave the text unprefixed rather than guessing.
+Respond with JSON only: {"subjective": string, "objective": string, "assessment": string, "plan": string, "icpc2": string[], "summary": string, "dialogue": string}`;
 
   // Anthropic /v1/messages format — natively proxied by LiteLLM (same body,
   // cache_control included), and the direct API when no gateway is configured.
@@ -163,6 +164,7 @@ Respond with JSON only: {"subjective": string, "objective": string, "assessment"
       },
       codes: Array.isArray(parsed.icpc2) ? parsed.icpc2.slice(0, 3).map(String) : [],
       summary: typeof parsed.summary === 'string' ? parsed.summary : '',
+      dialogue: typeof parsed.dialogue === 'string' ? parsed.dialogue : '',
       inputTokens: body.usage?.input_tokens ?? 0,
       outputTokens: body.usage?.output_tokens ?? 0,
     };
@@ -209,6 +211,7 @@ Deno.serve(async (req) => {
   let filename = 'consult.webm';
   let transcript = '';
   let patientId = '';
+  let mode = 'full';
 
   if (contentType.includes('multipart/form-data')) {
     const form = await req.formData();
@@ -220,6 +223,7 @@ Deno.serve(async (req) => {
     }
     transcript = String(form.get('transcript') ?? '');
     patientId = String(form.get('patientId') ?? '');
+    mode = String(form.get('mode') ?? 'full');
   } else {
     const body = await req.json();
     transcript = String(body.transcript ?? '');
@@ -255,10 +259,34 @@ Deno.serve(async (req) => {
   // 1) Transcribe (if audio given; otherwise trust the supplied transcript)
   let audioSeconds = 0;
   if (audio) {
-    audioSeconds = Math.round(audio.byteLength / 32_000); // ~32 kB/s webm opus — refined below by actual duration
+    // Estimate duration from size: WAV mono 16 kHz is ~32 kB/s; webm/ogg
+    // Opus voice is ~24-32 kbps (~3-4 kB/s). Used only for metering until the
+    // transcription response duration is available.
+    const isWav = filename.endsWith('.wav');
+    audioSeconds = Math.round(audio.byteLength / (isWav ? 32_000 : 4_000));
     const result = await transcribeAudio(audio, filename);
     if (result.error) return json({ error: result.error }, 502);
     transcript = result.transcript ?? transcript;
+    if (mode === 'transcribe') {
+      // Live-segment mode: return the text only; the GP's full transcript is
+      // structured once at the end of the consultation.
+      const segmentCost = audioSeconds * TRANSCRIBE_MILLICENTS_PER_SEC;
+      try {
+        await admin.from('ai_usage_log').insert({
+          practice_id: practiceId,
+          user_id: userData.user.id,
+          kind: 'scribe-transcribe',
+          model: TRANSCRIBE_MODEL,
+          audio_seconds: audioSeconds,
+          input_tokens: 0,
+          output_tokens: 0,
+          cost_millicents: Math.max(1, Math.round(segmentCost)),
+        });
+      } catch {
+        /* metering must not break the scribe */
+      }
+      return json({ transcript });
+    }
   } else if (!transcript.trim()) {
     return json({ error: 'Provide a recording or a transcript' }, 400);
   }
@@ -287,5 +315,5 @@ Deno.serve(async (req) => {
     /* metering must not break the scribe */
   }
 
-  return json({ transcript, draft: structured.draft, codes: structured.codes ?? [], summary: structured.summary ?? '' });
+  return json({ transcript, draft: structured.draft, codes: structured.codes ?? [], summary: structured.summary ?? '', dialogue: structured.dialogue ?? '' });
 });

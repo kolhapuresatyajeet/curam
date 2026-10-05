@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useParams } from 'wouter';
 import { AppButton, EmptyState, Field, SectionTitle, inputClass } from '@/components/shared/ui';
-import { draftSoapFromTranscript, draftSummaryFromTranscript, structureSoapRemote, suggestIcpc2 } from '@/lib/ai-scribe';
+import { audioFilename, draftSoapFromTranscript, draftSummaryFromTranscript, structureSoapRemote, suggestIcpc2, transcribeSegment } from '@/lib/ai-scribe';
 import { id, nowIso } from '@/lib/utils';
 import { consultationStore, useConsultationStore } from '@/stores/consultationStore';
 import { appStore, useAppState, useSessionStaff } from '@/stores/appStore';
@@ -15,14 +15,33 @@ export default function ConsultationPage() {
   const staff = useSessionStaff();
   const ui = useConsultationStore();
   const patient = state.patients.find((item) => item.id === params.id);
+  // Live transcription: the recorder is rolled every SEGMENT_MS so each
+  // segment is a self-contained webm file (timeslice chunks alone lack the
+  // webm header and cannot be decoded individually). Completed segments are
+  // transcribed in order while the GP is still talking.
+  const SEGMENT_MS = 30_000;
   const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const recordingActiveRef = useRef(false);
+  const segmentTimerRef = useRef<number | null>(null);
+  const uploadQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const segmentIndexRef = useRef(0);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [pendingSegments, setPendingSegments] = useState(0);
   const [structuring, setStructuring] = useState(false);
   const [scribeError, setScribeError] = useState('');
   // True when the practice's monthly AI budget is exhausted — the note stays
   // fully writable by hand; AI capture/structuring is paused until next month.
   const [budgetReached, setBudgetReached] = useState(false);
+
+  // Leaving the page mid-recording stops the mic, the segment timer and
+  // in-flight segment transcription cleanly.
+  useEffect(() => () => {
+    recordingActiveRef.current = false;
+    if (segmentTimerRef.current !== null) window.clearInterval(segmentTimerRef.current);
+    try { recorderRef.current?.stop(); } catch { /* already stopped */ }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
 
   const existing = useMemo(() => {
     if (window.location.search.includes('new=1')) return undefined; // "New SOAP note" — start blank
@@ -72,6 +91,50 @@ export default function ConsultationPage() {
 
   function patch(partial: Partial<Consultation>) {
     setNote((current) => ({ ...current, ...partial }));
+  }
+
+  function appendTranscript(text: string) {
+    setNote((current) => ({ ...current, aiTranscript: current.aiTranscript ? `${current.aiTranscript} ${text}` : text }));
+  }
+
+  function stopSegmentTimer() {
+    if (segmentTimerRef.current !== null) {
+      window.clearInterval(segmentTimerRef.current);
+      segmentTimerRef.current = null;
+    }
+  }
+
+  function startSegment(stream: MediaStream, patientId: string) {
+    const rec = new MediaRecorder(stream);
+    const mimeType = rec.mimeType || 'audio/webm';
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
+    };
+    rec.onstop = () => {
+      const blob = new Blob(chunks, { type: mimeType });
+      if (blob.size > 0) {
+        const index = segmentIndexRef.current;
+        segmentIndexRef.current += 1;
+        const name = audioFilename(mimeType).replace('consult', `consult-${index}`);
+        setPendingSegments((count) => count + 1);
+        // Sequential queue keeps segment text in speaking order even when
+        // responses complete out of order.
+        uploadQueueRef.current = uploadQueueRef.current.then(async () => {
+          try {
+            const result = await transcribeSegment({ patientId, audio: blob, audioName: name });
+            if (result.ok && result.text.trim()) appendTranscript(result.text.trim());
+            else if (!result.ok) setScribeError((prev) => prev || `Part ${index + 1} transcription failed: ${result.error}`);
+          } finally {
+            setPendingSegments((count) => count - 1);
+          }
+        });
+      }
+      if (recordingActiveRef.current) startSegment(stream, patientId);
+      else streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+    rec.start();
+    recorderRef.current = rec;
   }
 
   return (
@@ -148,42 +211,47 @@ export default function ConsultationPage() {
           onClick={async () => {
             setScribeError('');
             if (!ui.recording) {
-              // Start real audio capture
+              // Start real audio capture — segments roll every 30s and are
+              // transcribed live.
               try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                chunksRef.current = [];
-                const recorder = new MediaRecorder(stream);
-                recorder.ondataavailable = (event) => {
-                  if (event.data.size > 0) chunksRef.current.push(event.data);
-                };
-                recorder.onstop = () => {
-                  setAudioBlob(new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' }));
-                  stream.getTracks().forEach((track) => track.stop());
-                };
-                recorder.start();
-                recorderRef.current = recorder;
+                streamRef.current = stream;
+                recordingActiveRef.current = true;
+                segmentIndexRef.current = 0;
+                uploadQueueRef.current = Promise.resolve();
+                setRecordingSeconds(0);
+                startSegment(stream, patient.id);
                 consultationStore.setRecording(true);
+                segmentTimerRef.current = window.setInterval(() => {
+                  setRecordingSeconds((seconds) => seconds + SEGMENT_MS / 1000);
+                  if (recorderRef.current?.state === 'recording') recorderRef.current?.stop();
+                }, SEGMENT_MS);
               } catch {
                 setScribeError('Microphone access denied. Type the transcript below instead.');
               }
               return;
             }
-            // Stop capture
+            // Stop capture — the final partial segment is transcribed too.
+            recordingActiveRef.current = false;
+            stopSegmentTimer();
             recorderRef.current?.stop();
             recorderRef.current = null;
             consultationStore.setRecording(false);
           }}
         >
-          {ui.recording ? 'Stop capture' : audioBlob ? 'Re-record' : 'Start capture'}
+          {ui.recording ? 'Stop capture' : 'Start capture'}
         </AppButton>
-        {audioBlob && !ui.recording && (
-          <p className="text-[11px] text-slate-500">Recording captured ({Math.max(1, Math.round(audioBlob.size / 32_000))}s). Structuring will transcribe it.</p>
+        {ui.recording && (
+          <p className="text-[11px] text-teal-700">● Recording — {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')}. Transcript fills in below as Síle hears each part.</p>
         )}
-        <textarea className={`${inputClass} mt-3 h-40 py-2`} value={note.aiTranscript} onChange={(e) => patch({ aiTranscript: e.target.value })} placeholder="Live transcript (filled after capture, or type notes to structure)" />
+        {!ui.recording && pendingSegments > 0 && (
+          <p className="text-[11px] text-slate-500">Finishing transcription of the last part…</p>
+        )}
+        <textarea className={`${inputClass} mt-3 h-40 py-2`} value={note.aiTranscript} onChange={(e) => patch({ aiTranscript: e.target.value })} placeholder="Live transcript — fills in while recording, or type notes to structure" />
         <AppButton
           size="sm"
           variant="primary"
-          disabled={budgetReached || structuring || (!audioBlob && !note.aiTranscript.trim())}
+          disabled={budgetReached || structuring || ui.recording || pendingSegments > 0 || !note.aiTranscript.trim()}
           onClick={async () => {
             setScribeError('');
             setStructuring(true);
@@ -191,13 +259,15 @@ export default function ConsultationPage() {
             // the GP explicitly saves or signs the note.
             const remote = await structureSoapRemote({
               patientId: patient.id,
-              transcript: audioBlob ? undefined : note.aiTranscript,
-              audio: audioBlob,
+              // The live segments are already transcribed — structure the text
+              // directly (no second transcription pass, no double metering).
+              transcript: note.aiTranscript,
+              audio: null,
             });
             setStructuring(false);
             if (remote.ok) {
               patch({
-                aiTranscript: remote.result.transcript || note.aiTranscript,
+                aiTranscript: remote.result.dialogue || remote.result.transcript || note.aiTranscript,
                 aiDraftNote: remote.result.draft,
                 aiSummary: remote.result.summary || note.aiSummary,
                 icpc2Codes: remote.result.codes.length ? remote.result.codes : suggestIcpc2(remote.result.transcript || note.aiTranscript),
