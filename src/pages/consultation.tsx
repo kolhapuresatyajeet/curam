@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useParams } from 'wouter';
 import { AppButton, EmptyState, Field, SectionTitle, inputClass } from '@/components/shared/ui';
 import { audioFilename, draftSoapFromTranscript, draftSummaryFromTranscript, structureSoapRemote, suggestIcpc2, transcribeSegment } from '@/lib/ai-scribe';
+import { transcribeLocal } from '@/lib/local-scribe';
 import { id, nowIso } from '@/lib/utils';
 import { consultationStore, useConsultationStore } from '@/stores/consultationStore';
 import { appStore, useAppState, useSessionStaff } from '@/stores/appStore';
@@ -30,6 +31,12 @@ export default function ConsultationPage() {
   const [pendingSegments, setPendingSegments] = useState(0);
   const [structuring, setStructuring] = useState(false);
   const [scribeError, setScribeError] = useState('');
+  // Offline (free) tier — active when the practice's monthly AI budget is
+  // exhausted: one continuous recording transcribed on-device by Whisper.
+  const offlineChunksRef = useRef<Blob[]>([]);
+  const [offlineBlob, setOfflineBlob] = useState<Blob | null>(null);
+  const [localTranscribing, setLocalTranscribing] = useState(false);
+  const [localStatus, setLocalStatus] = useState('');
   // True when the practice's monthly AI budget is exhausted — the note stays
   // fully writable by hand; AI capture/structuring is paused until next month.
   const [budgetReached, setBudgetReached] = useState(false);
@@ -197,7 +204,7 @@ export default function ConsultationPage() {
         {budgetReached && (
           <div className="mt-3 rounded-lg bg-amber-50 p-3 text-[11px] leading-5 text-amber-800">
             <p className="font-semibold">Monthly AI budget reached</p>
-            <p className="mt-1">Síle is paused until next month. Type your note directly in the SOAP fields on the left —
+            <p className="mt-1">Síle is paused until next month. You can still record and transcribe for free on this device (button below), or type the note directly in the SOAP fields on the left —
             everything saves the same way. The practice manager can raise the cap.</p>
           </div>
         )}
@@ -211,27 +218,45 @@ export default function ConsultationPage() {
           onClick={async () => {
             setScribeError('');
             if (!ui.recording) {
-              // Start real audio capture — segments roll every 30s and are
-              // transcribed live.
               try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 streamRef.current = stream;
                 recordingActiveRef.current = true;
-                segmentIndexRef.current = 0;
-                uploadQueueRef.current = Promise.resolve();
                 setRecordingSeconds(0);
-                startSegment(stream, patient.id);
+                if (budgetReached) {
+                  // Offline mode: one continuous recording, transcribed
+                  // on-device when the GP stops — no API, no cost.
+                  offlineChunksRef.current = [];
+                  const rec = new MediaRecorder(stream);
+                  rec.ondataavailable = (event) => {
+                    if (event.data.size > 0) offlineChunksRef.current.push(event.data);
+                  };
+                  rec.onstop = () => {
+                    setOfflineBlob(new Blob(offlineChunksRef.current, { type: rec.mimeType || 'audio/webm' }));
+                    streamRef.current?.getTracks().forEach((track) => track.stop());
+                  };
+                  rec.start();
+                  recorderRef.current = rec;
+                  segmentTimerRef.current = window.setInterval(() => setRecordingSeconds((seconds) => seconds + 1), 1000);
+                } else {
+                  // Paid mode — segments roll every 30s and are transcribed
+                  // live.
+                  segmentIndexRef.current = 0;
+                  uploadQueueRef.current = Promise.resolve();
+                  startSegment(stream, patient.id);
+                  segmentTimerRef.current = window.setInterval(() => {
+                    setRecordingSeconds((seconds) => seconds + SEGMENT_MS / 1000);
+                    if (recorderRef.current?.state === 'recording') recorderRef.current?.stop();
+                  }, SEGMENT_MS);
+                }
                 consultationStore.setRecording(true);
-                segmentTimerRef.current = window.setInterval(() => {
-                  setRecordingSeconds((seconds) => seconds + SEGMENT_MS / 1000);
-                  if (recorderRef.current?.state === 'recording') recorderRef.current?.stop();
-                }, SEGMENT_MS);
               } catch {
                 setScribeError('Microphone access denied. Type the transcript below instead.');
               }
               return;
             }
-            // Stop capture — the final partial segment is transcribed too.
+            // Stop capture — in paid mode the final partial segment is
+            // transcribed too; offline mode yields the recording blob.
             recordingActiveRef.current = false;
             stopSegmentTimer();
             recorderRef.current?.stop();
@@ -242,16 +267,53 @@ export default function ConsultationPage() {
           {ui.recording ? 'Stop capture' : 'Start capture'}
         </AppButton>
         {ui.recording && (
-          <p className="text-[11px] text-teal-700">● Recording — {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')}. Transcript fills in below as Síle hears each part.</p>
+          <p className="text-[11px] text-teal-700">● Recording — {Math.floor(recordingSeconds / 60)}:{String(recordingSeconds % 60).padStart(2, '0')}.{budgetReached ? ' Audio is kept on this device until transcribed.' : ' Transcript fills in below as Síle hears each part.'}</p>
         )}
         {!ui.recording && pendingSegments > 0 && (
           <p className="text-[11px] text-slate-500">Finishing transcription of the last part…</p>
         )}
         <textarea className={`${inputClass} mt-3 h-40 py-2`} value={note.aiTranscript} onChange={(e) => patch({ aiTranscript: e.target.value })} placeholder="Live transcript — fills in while recording, or type notes to structure" />
-        <AppButton
+        {budgetReached ? (
+          <>
+            <AppButton
+              size="sm"
+              variant="primary"
+              disabled={!offlineBlob || localTranscribing || ui.recording}
+              onClick={async () => {
+                if (!offlineBlob) return;
+                setScribeError('');
+                setLocalTranscribing(true);
+                setLocalStatus('Loading speech model…');
+                try {
+                  const text = await transcribeLocal(offlineBlob, setLocalStatus);
+                  const draft = draftSoapFromTranscript(text, '');
+                  patch({
+                    aiTranscript: text,
+                    aiDraftNote: draft,
+                    aiSummary: draftSummaryFromTranscript(text),
+                    icpc2Codes: suggestIcpc2(text),
+                    aiScribeUsed: true,
+                  });
+                  setLocalStatus('');
+                } catch {
+                  setScribeError('On-device transcription failed — type the transcript below instead.');
+                } finally {
+                  setLocalTranscribing(false);
+                }
+              }}
+            >
+              {localTranscribing ? 'Transcribing on device…' : 'Transcribe on device (free)'}
+            </AppButton>
+            {localStatus && <p className="text-[11px] text-slate-500">{localStatus}</p>}
+            {offlineBlob && !ui.recording && !localTranscribing && (
+              <p className="text-[11px] text-slate-500">Recording captured. On-device Whisper runs in this browser — audio never leaves the computer. Quality is lower than Síle's cloud transcription; review the draft carefully.</p>
+            )}
+          </>
+        ) : (
+          <AppButton
           size="sm"
           variant="primary"
-          disabled={budgetReached || structuring || ui.recording || pendingSegments > 0 || !note.aiTranscript.trim()}
+          disabled={structuring || ui.recording || pendingSegments > 0 || !note.aiTranscript.trim()}
           onClick={async () => {
             setScribeError('');
             setStructuring(true);
@@ -286,7 +348,8 @@ export default function ConsultationPage() {
           }}
         >
           {structuring ? 'Structuring…' : 'Structure SOAP'}
-        </AppButton>
+          </AppButton>
+        )}
         {scribeError && <p className="text-[11px] text-amber-700">{scribeError}</p>}
         {note.aiSummary && (
           <div className="mt-3 rounded-lg bg-[#eef4f9] p-3 text-[11px] leading-5 text-slate-600">
