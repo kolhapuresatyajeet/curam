@@ -7,6 +7,7 @@ import { CookieConsent } from '@/components/shared/CookieConsent';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import BillingPage from '@/pages/billing';
+import SaasAdminPage from '@/pages/saas-admin';
 import PublicBookingPage from '@/pages/booking';
 import CalendarPage from '@/pages/calendar';
 import CdmPage from '@/pages/cdm';
@@ -119,6 +120,11 @@ function Router() {
         <Route path="/referrals">
           <Authed>
             <ReferralsPage />
+          </Authed>
+        </Route>
+        <Route path="/saas-admin">
+          <Authed>
+            <SaasAdminPage />
           </Authed>
         </Route>
         <Route path="/billing">

@@ -1,242 +1,147 @@
-import { useEffect, useMemo, useState } from 'react';
-import { AppButton, Badge, SectionTitle, TableShell, Tabs } from '@/components/shared/ui';
-import { fetchInvoices, updateInvoicePayment } from '@/lib/db';
-import { createPaymentLinkRemote } from '@/lib/stripe';
-import { openReceipt } from '@/lib/receipt';
-import { supabaseConfigured } from '@/lib/supabase';
-import { formatEur, formatIrishDate } from '@/lib/utils';
-import { appStore, useAppState } from '@/stores/appStore';
-import { patientName, type Invoice, type InvoiceStatus } from '@/types/domain';
+import { useCallback, useEffect, useState } from 'react';
+import { useLocation, useSearchParams } from 'wouter';
+import { AppButton, EmptyState, SectionTitle } from '@/components/shared/ui';
+import { useAppState } from '@/stores/appStore';
+import { canManagePractice } from '@/lib/roles';
+import { fetchSaasBilling, openBillingPortal, startCheckout, type SaasBilling } from '@/lib/saas';
+import { formatIrishDate } from '@/lib/utils';
+import { CheckCircle2, CreditCard, Sparkles } from 'lucide-react';
 
-function agingDays(iso: string) {
-  return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
-}
+const STATUS_LABEL: Record<SaasBilling['saasStatus'], string> = {
+  none: 'No subscription yet',
+  trial: 'Free trial',
+  active: 'Active',
+  past_due: 'Payment failed — update your card',
+  free: 'Free practice',
+  canceled: 'Canceled',
+};
 
-function LinkCell({ invoice, stripeConnected }: { invoice: Invoice; stripeConnected: boolean }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const [copied, setCopied] = useState(false);
-
-  if (!stripeConnected || invoice.billingSource === 'gms' || invoice.amount - invoice.paidAmount <= 0) return null;
-
-  if (invoice.paymentLinkUrl) {
-    return (
-      <button
-        type="button"
-        className="text-[11px] text-teal-700 underline"
-        onClick={() => {
-          void navigator.clipboard.writeText(invoice.paymentLinkUrl!);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        }}
-      >
-        {copied ? 'Copied!' : 'Copy link'}
-      </button>
-    );
-  }
-
-  return (
-    <span className="flex flex-col items-start gap-1">
-      <AppButton
-        size="sm"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true);
-          setError('');
-          const result = await createPaymentLinkRemote(invoice.id);
-          setBusy(false);
-          if (result.ok) {
-            appStore.upsertInvoices([{ ...invoice, paymentLinkUrl: result.url }]);
-          } else {
-            setError(result.error);
-          }
-        }}
-      >
-        {busy ? 'Creating…' : 'Payment link'}
-      </AppButton>
-      {error && <span className="text-[10px] text-red-600">{error}</span>}
-    </span>
-  );
-}
-
+/** Billing page — the practice pays for Cúram (€99/mo or €990/yr). GP/PM only
+ *  gets actions; other staff see the status. Clinical data is never gated on
+ *  payment — a lapsed subscription shows a banner, not a lockout. */
 export default function BillingPage() {
   const state = useAppState();
-  const [tab, setTab] = useState('Overview');
-  const [status, setStatus] = useState<InvoiceStatus | 'all'>('all');
-  const [loaded, setLoaded] = useState(false);
-  const [stripeConnected, setStripeConnected] = useState(true);
+  const me = state.staff.find((member) => member.id === state.session?.staffId);
+  const canManage = canManagePractice(me?.role);
+  const [, setSearchParams] = useSearchParams();
+  const [, setLocation] = useLocation();
+  const [billing, setBilling] = useState<SaasBilling | null>(null);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
-  // Pull real invoices from Supabase (including auto-invoices created by the DB trigger).
+  const refresh = useCallback(() => {
+    void fetchSaasBilling(state.practice.id).then(setBilling);
+  }, [state.practice.id]);
+
+  useEffect(refresh, [refresh]);
+
+  // Returning from Stripe Checkout.
   useEffect(() => {
-    if (!supabaseConfigured || loaded) return;
-    setLoaded(true);
-    void fetchInvoices().then((invoices) => {
-      if (invoices.length) appStore.upsertInvoices(invoices);
-    });
-  }, [loaded]);
+    const result = new URLSearchParams(window.location.search).get('saas');
+    if (result === 'success') setMessage('Subscription started — thank you. Welcome to Cúram.');
+    if (result === 'cancel') setError('Checkout was cancelled — nothing was charged.');
+    if (result) setLocation('/billing', { replace: true });  }, [setLocation]);
 
-  const invoices = useMemo(
-    () => state.invoices.filter((item) => status === 'all' || item.status === status),
-    [state.invoices, status],
-  );
-  const outstanding = invoices.filter((i) => i.status !== 'paid').reduce((s, i) => s + (i.amount - i.paidAmount), 0);
+  async function choose(plan: 'monthly' | 'yearly') {
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const result = await startCheckout(plan, code.trim() || undefined);
+      if (result.free) {
+        setMessage('Code accepted — this practice is on the free plan.');
+        refresh();
+      } else if (result.url) {
+        window.location.href = result.url;
+      }
+    } catch (e) {
+      setError(String((e as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function portal() {
+    setBusy(true);
+    setError('');
+    try {
+      const { url } = await openBillingPortal();
+      window.location.href = url;
+    } catch (e) {
+      setError(String((e as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const status = billing?.saasStatus ?? 'none';
+  const settled = status === 'active' || status === 'free';
 
   return (
     <div className="fade-in">
-      <SectionTitle title="Billing" description={`Outstanding ${formatEur(outstanding)}. Aging buckets 7 / 14 / 21 / 30 days.`} />
-      <Tabs items={['Overview', 'PCRS claims', 'Insurer claims', 'Payments']} value={tab} onChange={setTab} />
-      {tab === 'Overview' && (
-        <>
-          <div className="mb-3 flex flex-wrap gap-2">
-            {(['all', 'unbilled', 'invoiced', 'partial', 'paid', 'rejected'] as const).map((item) => (
-              <button key={item} type="button" onClick={() => setStatus(item)} className={`rounded-md px-3 py-1.5 text-[11px] ${status === item ? 'bg-teal-50 text-teal-800' : 'text-slate-400'}`}>
-                {item}
-              </button>
-            ))}
-          </div>
-          <TableShell>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Client</th>
-                <th>Source</th>
-                <th>Billed</th>
-                <th>Paid</th>
-                <th>Unpaid</th>
-                <th>Aging</th>
-                <th>Status</th>
-                <th>Pay online</th>
-                <th />
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((inv) => {
-                const patient = state.patients.find((p) => p.id === inv.patientId);
-                const unpaid = inv.amount - inv.paidAmount;
-                const age = agingDays(inv.issuedAt);
-                return (
-                  <tr key={inv.id}>
-                    <td>{formatIrishDate(inv.issuedAt)}</td>
-                    <td>{patient ? patientName(patient) : inv.patientId}</td>
-                    <td>{inv.billingSource}</td>
-                    <td>{formatEur(inv.amount)}</td>
-                    <td>{formatEur(inv.paidAmount)}</td>
-                    <td>{formatEur(unpaid)}</td>
-                    <td>{unpaid ? `${age}d` : '—'}</td>
-                    <td>
-                      <Badge tone={inv.status === 'paid' ? 'teal' : inv.status === 'rejected' ? 'coral' : 'amber'}>{inv.status}</Badge>
-                    </td>
-                    <td>
-                      <LinkCell invoice={inv} stripeConnected={stripeConnected} />
-                    </td>
-                    <td>
-                      {unpaid > 0 && (
-                        <AppButton
-                          size="sm"
-                          onClick={() => {
-                            const newPaid = Math.min(inv.paidAmount + unpaid, inv.amount);
-                            const newStatus = newPaid >= inv.amount ? 'paid' : 'partial';
-                            const method = stripeConnected ? 'card' : 'cash';
-                            appStore.payInvoice(inv.id, unpaid);
-                            if (supabaseConfigured) {
-                              void updateInvoicePayment(inv.id, newPaid, newStatus, method);
-                            }
-                          }}
-                        >
-                          {stripeConnected ? 'Record payment' : 'Cash / in-room'}
-                        </AppButton>
-                      )}
-                    </td>
-                    <td>
-                      {inv.paidAmount > 0 && patient && (
-                        <button
-                          type="button"
-                          className="text-[11px] text-teal-700 underline"
-                          onClick={() => openReceipt(inv, patient, state.practice)}
-                        >
-                          Receipt
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </TableShell>
-        </>
+      <SectionTitle title="Billing" description="Cúram subscription for the whole practice. Every plan covers all your staff — no per-seat fees." />
+      {!canManage && (
+        <p className="mb-3 text-[12px] text-slate-500">Only the GP or practice manager can change billing.</p>
       )}
-      {tab === 'PCRS claims' && (
-        <div className="surface divide-y rounded-xl">
-          {state.pcrsClaims.map((claim) => (
-            <div key={claim.id} className="flex items-center gap-3 px-4 py-3 text-xs">
-              <span className="flex-1">{claim.stcCode} · {claim.status} {claim.rejectionReason ? `· ${claim.rejectionReason}` : ''}</span>
-              {claim.status === 'staged' && (
-                <AppButton size="sm" onClick={() => appStore.submitPcrs(claim.id)}>
-                  Submit
+
+      <div className="surface max-w-2xl rounded-xl p-4">
+        <div className="flex items-center gap-2">
+          <span className={`icon-box ${settled ? 'icon-teal' : status === 'past_due' ? 'icon-coral' : 'icon-amber'}`}>
+            <CheckCircle2 size={15} />
+          </span>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-slate-800">{STATUS_LABEL[status]}</p>
+            <p className="text-[11px] text-slate-500">
+              {billing?.saasPlan === 'monthly' && '€99 per month'}
+              {billing?.saasPlan === 'yearly' && '€990 per year'}
+              {billing?.saasPlan === 'free' && 'Complimentary practice'}
+              {billing?.saasPeriodEnd && status === 'active' && ` · renews ${formatIrishDate(billing.saasPeriodEnd)}`}
+              {status === 'trial' && ' — trial in progress'}
+            </p>
+          </div>
+          {(status === 'active' || status === 'past_due' || status === 'trial') && canManage && (
+            <AppButton size="sm" onClick={() => void portal()} disabled={busy}>
+              <CreditCard size={13} /> Manage billing
+            </AppButton>
+          )}
+        </div>
+      </div>
+
+      {canManage && !settled && (
+        <div className="mt-4 grid max-w-2xl gap-3 sm:grid-cols-2">
+          {(['monthly', 'yearly'] as const).map((plan) => (
+            <div key={plan} className="surface rounded-xl p-4">
+              <p className="text-sm font-semibold text-slate-800">{plan === 'monthly' ? 'Monthly' : 'Yearly'}</p>
+              <p className="mt-1 text-[21px] font-semibold text-slate-800">
+                €{plan === 'monthly' ? '99' : '990'}
+                <span className="text-[12px] font-normal text-slate-500">/{plan === 'monthly' ? 'month' : 'year'}</span>
+              </p>
+              <p className="mt-1 text-[11px] text-slate-500">{plan === 'yearly' ? 'Two months free' : 'Cancel anytime'}</p>
+              <div className="mt-3">
+                <AppButton size="sm" variant="primary" onClick={() => void choose(plan)} disabled={busy}>
+                  <Sparkles size={13} /> Choose {plan}
                 </AppButton>
-              )}
+              </div>
             </div>
           ))}
+          <div className="sm:col-span-2">
+            <input
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              placeholder="Discount or invitation code (optional)"
+              className="h-9 w-full rounded-lg border border-slate-200 px-3 text-[12px] outline-none focus:border-purple-400"
+            />
+          </div>
         </div>
       )}
-      {tab === 'Insurer claims' && (
-        <div className="grid gap-3">
-          <div className="surface rounded-xl border border-amber-200 bg-amber-50 p-4">
-            <div className="text-sm font-semibold text-amber-800">Direct insurer claims — coming soon</div>
-            <p className="mt-1 text-xs text-amber-700">
-              Automated claim submission to VHI, Laya Healthcare, Irish Life Health and Aviva is
-              in development. Each insurer currently requires its own format and portal — we are
-              building these one by one. In the meantime, use patient receipts to claim back fees.
-            </p>
-          </div>
-          <div className="surface rounded-xl p-4">
-            <div className="text-sm font-semibold">Claim back via patient receipt — available now</div>
-            <p className="mt-1 text-xs text-slate-500">
-              Open the <strong>Overview</strong> tab and click <strong>Receipt</strong> on any paid
-              invoice. Save the PDF (A5, practice letterhead, service, amount, payment method) and
-              upload it to the patient's insurer portal, or print/email it for the patient.
-            </p>
-          </div>
-          {['vhi', 'laya', 'irish_life', 'aviva'].map((insurer) => {
-            const list = state.invoices.filter((i) => i.billingSource === insurer);
-            const total = list.reduce((s, i) => s + i.amount, 0);
-            return (
-              <div key={insurer} className="surface flex items-center gap-3 rounded-xl p-4">
-                <div className="flex-1">
-                  <div className="text-sm font-semibold capitalize">{insurer.replace('_', ' ')}</div>
-                  <div className="text-xs text-slate-500">{list.length} invoices recorded · {formatEur(total)} · receipts available in Overview</div>
-                </div>
-                <Badge tone="amber">Coming soon</Badge>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {tab === 'Payments' && (
-        <div className="surface divide-y rounded-xl">
-          {state.invoices.filter((i) => i.paidAmount > 0 || i.paymentLinkUrl).map((inv) => {
-            const patient = state.patients.find((p) => p.id === inv.patientId);
-            return (
-              <div key={inv.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-xs">
-                <span className="flex-1">
-                  {inv.stripePaymentId ? `Stripe ${inv.stripePaymentId} · ` : ''}
-                  {formatEur(inv.paidAmount)} of {formatEur(inv.amount)} · {inv.description ?? 'invoice'}
-                </span>
-                {inv.paymentLinkUrl && (
-                  <a className="text-[11px] text-teal-700 underline" href={inv.paymentLinkUrl} target="_blank" rel="noreferrer">
-                    Open payment page
-                  </a>
-                )}
-                {inv.paidAmount > 0 && patient && (
-                  <button type="button" className="text-[11px] text-teal-700 underline" onClick={() => openReceipt(inv, patient, state.practice)}>
-                    Receipt
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
+
+      {message && <p className="mt-3 max-w-2xl text-[12px] text-teal-700">{message}</p>}
+      {error && <p className="mt-3 max-w-2xl text-[12px] text-[#b5443b]" role="alert">{error}</p>}
+
+      {status === 'none' && !canManage && (
+        <EmptyState title="No subscription yet" detail="The GP or practice manager sets up billing here." />
       )}
     </div>
   );
