@@ -189,7 +189,13 @@ export default function SaasAdminPage() {
 function Emptyish() {
   return (
     <div className="p-8">
-      <p className="text-[12px] text-slate-500">Platform admin access required. Your account needs platform_admin = true in its Supabase auth metadata.</p>
+      <p className="text-[12px] text-slate-500">
+        Platform admin access required. Sign in with the platform admin account (needs platform_admin = true in its
+        Supabase auth metadata).{' '}
+        <a href="/login" className="text-teal-700 underline">
+          Go to sign in
+        </a>
+      </p>
     </div>
   );
 }

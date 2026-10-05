@@ -128,11 +128,9 @@ function Router() {
             <SetupWizard />
           </Authed>
         </Route>
-        <Route path="/saas-admin">
-          <Authed>
-            <SaasAdminPage />
-          </Authed>
-        </Route>
+        {/* Standalone like /support — AppShell redirects staff-less platform
+            admins to /support, which would loop; the page gates itself. */}
+        <Route path="/saas-admin" component={SaasAdminPage} />
         <Route path="/billing">
           <Authed>
             <BillingPage />
