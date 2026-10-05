@@ -4,6 +4,7 @@ import { AppButton, Field, inputClass } from '@/components/shared/ui';
 import { appStore, useAppState } from '@/stores/appStore';
 import { inviteStaffMember, savePracticeOnboarding } from '@/lib/db';
 import { fetchSaasBilling, startCheckout } from '@/lib/saas';
+import { provisionVoicehub, type VoicehubProvisionResult } from '@/lib/voicehub';
 import { ArrowRight, Building2, Check, CreditCard, Mic, Users } from 'lucide-react';
 
 /**
@@ -142,13 +143,17 @@ function StepDetails({ onNext }: { onNext: () => void }) {
 
 function StepVoicehub({ onDone }: { onDone: () => void }) {
   const state = useAppState();
-  const [agentId, setAgentId] = useState(state.practice.voicehubAgentId);
-  const [phone, setPhone] = useState(state.practice.voicehubPhone);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [showManual, setShowManual] = useState(false);
+  const [result, setResult] = useState<VoicehubProvisionResult | null>(null);
+  const [agentId, setAgentId] = useState(state.practice.voicehubAgentId);
+  const [phone, setPhone] = useState(state.practice.voicehubPhone);
 
+  const connected = Boolean(state.practice.voicehubAgentId);
   const me = state.staff.find((m) => m.id === state.session?.staffId);
 
+  // Fallback if provisioning is down: the manual VoiceHub signup link.
   const signupUrl = useMemo(() => {
     const params = new URLSearchParams({
       practice: state.practice.name,
@@ -160,51 +165,135 @@ function StepVoicehub({ onDone }: { onDone: () => void }) {
     return `${VOICEHUB_URL}/signup?${params.toString()}`;
   }, [state.practice.name, state.practice.address, state.practice.phone, me?.email]);
 
+  function provision() {
+    void (async () => {
+      setBusy(true);
+      setError('');
+      const { data, error: provisionError } = await provisionVoicehub();
+      setBusy(false);
+      if (provisionError || !data) return setError(provisionError?.message ?? 'Provisioning failed');
+      appStore.updatePractice({
+        voicehubAgentId: data.agent_id,
+        voicehubTenantId: data.tenant_id,
+        voicehubPhone: data.phone_number,
+        voicehubConnectedAt: new Date().toISOString(),
+      });
+      setResult(data);
+    })();
+  }
+
+  // ── Success screen: number live + one-time portal setup link ────────────
+  if (result) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg bg-teal-50 px-4 py-3 text-[12px] text-teal-800">
+          <p className="flex items-center gap-1.5 font-medium">
+            <Check size={13} /> Your AI receptionist is live
+          </p>
+          <p className="mt-1 text-teal-700">
+            Patients can call <span className="font-semibold">{result.phone_number}</span> right now — bookings land
+            straight in your Cúram diary.
+          </p>
+        </div>
+        {result.portal_login?.setup_url && (
+          <a href={result.portal_login.setup_url} target="_blank" rel="noreferrer">
+            <AppButton variant="primary">
+              Set up your receptionist dashboard <ArrowRight size={13} />
+            </AppButton>
+          </a>
+        )}
+        <p className="text-[11px] text-slate-400">
+          That link sets your VoiceHub portal password — it only works once and expires in an hour (we can re-send it
+          anytime). Sign in afterwards with {state.practice.voicehubPortalEmail || 'your practice email'}.
+        </p>
+        <AppButton variant="primary" onClick={onDone}>
+          Continue <ArrowRight size={13} />
+        </AppButton>
+      </div>
+    );
+  }
+
+  // ── Already connected (returning to the step) ────────────────────────────
+  if (connected) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg bg-teal-50 px-4 py-3 text-[12px] text-teal-800">
+          <p className="flex items-center gap-1.5 font-medium">
+            <Check size={13} /> VoiceHub connected
+          </p>
+          <p className="mt-1 text-teal-700">
+            Receptionist line: <span className="font-semibold">{state.practice.voicehubPhone || 'number pending'}</span>
+          </p>
+        </div>
+        <AppButton variant="primary" onClick={onDone}>
+          Continue <ArrowRight size={13} />
+        </AppButton>
+      </div>
+    );
+  }
+
+  // ── One-click provisioning ───────────────────────────────────────────────
   return (
     <div className="space-y-4">
-      <ol className="space-y-2 text-[12px] leading-5 text-slate-600">
-        <li>
-          1. Open VoiceHub — your practice details are pre-filled:{' '}
-          <a href={signupUrl} target="_blank" rel="noreferrer" className="font-medium text-purple-700 underline">
-            Set up my AI receptionist ↗
-          </a>
-        </li>
-        <li>2. Pick a phone number and follow the short setup there.</li>
-        <li>3. Paste your VoiceHub agent ID and number below — test calls come from the next screen.</li>
-      </ol>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="VoiceHub agent ID">
-          <input className={inputClass} value={agentId} onChange={(e) => setAgentId(e.target.value)} placeholder="agent_xxxx" />
-        </Field>
-        <Field label="Receptionist phone number">
-          <input className={inputClass} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01 555 1234" />
-        </Field>
-      </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
-      <AppButton
-        variant="primary"
-        disabled={busy || !agentId.trim()}
-        onClick={() => {
-          void (async () => {
-            setBusy(true);
-            setError('');
-            const { error } = await savePracticeOnboarding(state.practice.id, {
-              voicehub_agent_id: agentId.trim(),
-              voicehub_phone: phone.trim(),
-              voicehub_connected_at: new Date().toISOString(),
-            });
-            setBusy(false);
-            if (error) return setError(error.message);
-            appStore.updatePractice({ voicehubAgentId: agentId.trim(), voicehubPhone: phone.trim(), voicehubConnectedAt: new Date().toISOString() });
-            onDone();
-          })();
-        }}
-      >
-        Connect VoiceHub <ArrowRight size={13} />
+      <p className="text-[12px] leading-5 text-slate-600">
+        One click sets up everything with VoiceHub: your AI receptionist agent, a dedicated Irish phone number, and a
+        portal login for your practice. Bookings made by phone appear in your Cúram diary automatically. Takes about
+        15 seconds.
+      </p>
+      {error && (
+        <div className="rounded-lg bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+          <p>{error}</p>
+          <button type="button" className="mt-1 underline" onClick={() => setShowManual(true)}>
+            Prefer to set it up manually? Use the VoiceHub website instead →
+          </button>
+        </div>
+      )}
+      {showManual && (
+        <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+          <p className="text-[12px] text-slate-600">
+            1. Sign up on VoiceHub (your details are pre-filled):{' '}
+            <a href={signupUrl} target="_blank" rel="noreferrer" className="font-medium text-purple-700 underline">
+              Set up my AI receptionist ↗
+            </a>
+          </p>
+          <p className="text-[12px] text-slate-600">2. Paste your VoiceHub agent ID and number below.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="VoiceHub agent ID">
+              <input className={inputClass} value={agentId} onChange={(e) => setAgentId(e.target.value)} placeholder="agent_xxxx" />
+            </Field>
+            <Field label="Receptionist phone number">
+              <input className={inputClass} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01 555 1234" />
+            </Field>
+          </div>
+          <AppButton
+            size="sm"
+            disabled={!agentId.trim()}
+            onClick={() => {
+              void (async () => {
+                setBusy(true);
+                const { error } = await savePracticeOnboarding(state.practice.id, {
+                  voicehub_agent_id: agentId.trim(),
+                  voicehub_phone: phone.trim(),
+                  voicehub_connected_at: new Date().toISOString(),
+                });
+                setBusy(false);
+                if (error) return setError(error.message);
+                appStore.updatePractice({ voicehubAgentId: agentId.trim(), voicehubPhone: phone.trim(), voicehubConnectedAt: new Date().toISOString() });
+                onDone();
+              })();
+            }}
+          >
+            Connect manually
+          </AppButton>
+        </div>
+      )}
+      <AppButton variant="primary" disabled={busy} onClick={provision}>
+        {busy ? 'Setting up your receptionist…' : 'Set up my AI receptionist'} <ArrowRight size={13} />
       </AppButton>
+      {busy && <p className="text-[11px] text-slate-400">Creating the agent and acquiring a phone number — don't close this page.</p>}
       <p className="text-[11px] text-slate-400">
-        When VoiceHub's provisioning API is live, this step becomes one click — the manual link is the fallback until
-        then.
+        VoiceHub bills separately for call minutes. You can change the receptionist's greeting, hours and transfer
+        rules in the VoiceHub portal afterwards.
       </p>
     </div>
   );

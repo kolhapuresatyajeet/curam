@@ -25,11 +25,19 @@ Deno.serve(async (req) => {
   const url = new URL(req.url);
   const day = url.searchParams.get('date') ?? new Date().toISOString().slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return json({ error: 'date must be YYYY-MM-DD' }, 400);
-  const practiceId = url.searchParams.get('practiceId');
+  let practiceId = url.searchParams.get('practiceId');
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
   const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
   const admin = createClient(supabaseUrl, service);
+
+  // Master key (Síle demo) or a per-clinic VoiceHub key. A clinic key is scoped
+  // to its own practice — the query param cannot widen it.
+  const providedKey = req.headers.get('x-booking-key') ?? '';
+  const { resolveVoiceKey } = await import('../_shared/booking-keys.ts');
+  const keyCheck = await resolveVoiceKey(admin, providedKey);
+  if (!keyCheck.ok) return json({ error: keyCheck.error }, keyCheck.status ?? 401);
+  if (keyCheck.scopedPracticeId) practiceId = keyCheck.scopedPracticeId;
 
   let staffQuery = admin.from('staff').select('id, name, practice_id').eq('active', true).in('role', ['gp', 'nurse']);
   if (practiceId) staffQuery = staffQuery.eq('practice_id', practiceId);

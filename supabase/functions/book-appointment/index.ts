@@ -22,18 +22,25 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
 
-  const bookingKey = Deno.env.get('BOOKING_API_KEY') ?? '';
-  const provided = req.headers.get('x-booking-key') ?? '';
-  const body = await req.json();
-  const bookedVia = bookingChannel(body.bookedVia);
+  const url = Deno.env.get('SUPABASE_URL') ?? '';
+  const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+  const admin = createClient(url, service);
 
+  const body = await req.json();
+  let bookedVia = bookingChannel(body.bookedVia);
+
+  // Auth: master key (Síle demo) or a per-clinic VoiceHub key. A clinic key is
+  // scoped to its own practice — the body's practiceId cannot widen it.
+  const providedKey = req.headers.get('x-booking-key') ?? '';
+  const { resolveVoiceKey } = await import('../_shared/booking-keys.ts');
+  const keyCheck = await resolveVoiceKey(admin, providedKey);
+  if (!keyCheck.ok) return json({ error: keyCheck.error }, keyCheck.status ?? 401);
+  let scopedPracticeId: string | null = null;
+  if (keyCheck.scopedPracticeId) scopedPracticeId = keyCheck.scopedPracticeId;
+  if (providedKey && bookedVia === 'online') bookedVia = 'sile';
   if (bookedVia === 'reception') {
     return json({ error: 'Reception bookings use the practice diary, not this API' }, 403);
-  }
-
-  if (bookedVia === 'sile') {
-    if (!bookingKey) return json({ error: 'Voice booking is not configured' }, 503);
-    if (provided !== bookingKey) return json({ error: 'Voice agent key required' }, 401);
   }
 
   const triage = String(body.triageNotes ?? body.reason ?? '');
@@ -41,13 +48,8 @@ Deno.serve(async (req) => {
     return json({ emergency: 'Please hang up and call 999 or 112 now.' }, 409);
   }
 
-  const url = Deno.env.get('SUPABASE_URL') ?? '';
-  const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-  const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
-  const admin = createClient(url, service);
-
   let patientId = body.patientId as string | undefined;
-  let practiceId = body.practiceId as string | undefined;
+  let practiceId = (scopedPracticeId ?? body.practiceId) as string | undefined;
 
   if (!patientId) {
     const phone = String(body.phone ?? body.mobile ?? '');

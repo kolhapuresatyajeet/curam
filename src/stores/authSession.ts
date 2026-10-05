@@ -71,7 +71,9 @@ async function hydrate(
         stripeAccountId: practice.stripe_account_id ?? "",
         openingHours: practice.opening_hours ?? "",
         voicehubAgentId: practice.voicehub_agent_id ?? "",
+        voicehubTenantId: practice.voicehub_tenant_id ?? "",
         voicehubPhone: practice.voicehub_phone ?? "",
+        voicehubPortalEmail: practice.voicehub_portal_email ?? "",
         voicehubConnectedAt: practice.voicehub_connected_at ?? null,
         onboardingDone: practice.onboarding_done ?? [],
       });

@@ -81,7 +81,9 @@ export interface Practice {
   stripeAccountId: string;
   openingHours: string;
   voicehubAgentId: string;
+  voicehubTenantId: string;
   voicehubPhone: string;
+  voicehubPortalEmail: string;
   voicehubConnectedAt: string | null;
   onboardingDone: string[];
 }
