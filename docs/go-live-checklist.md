@@ -53,6 +53,7 @@ Prices are list price at time of writing — check before purchase.
 - [ ] Confirm transcription chat-model fallback is EU-routed (`gemini-3.8-flash` via gateway)
 - [ ] Verify audio is never persisted (audio blobs are request-scoped only) — spot-check the scribe function
 - [ ] Draft the AI addendum for the patient consent / privacy notice: recording, transcription, human approval of every AI output
+- [ ] **VoiceHub provisioning key**: `VOICEHUB_PROVISIONING_API_KEY` lives only in Supabase secrets (never Vercel/client env — the edge function is the only holder). It can create tenants, buy Twilio numbers and create portal logins — if it ever leaks, VoiceHub rotates by setting a new `PROVISIONING_API_KEY` on their Vercel + redelivering to us (no per-key state on their side). Note: first copy arrived via chat plaintext — consider asking VoiceHub for a fresh rotation before go-live.
 
 ## 5. Payments & billing (Stripe)
 
