@@ -1,6 +1,7 @@
 import { cors, json } from '../_shared/http.ts';
 import { parseHl7Xml } from '../_shared/hl7-parser.ts';
 import { fileMessage } from '../_shared/healthlink-handlers.ts';
+import { sha256Hex } from '../_shared/booking-keys.ts';
 
 // Manual report upload — the zero-install alternative to the HealthLink
 // bridge. Staff download a report anywhere (HealthLink web, hospital portal,
@@ -13,9 +14,12 @@ import { fileMessage } from '../_shared/healthlink-handlers.ts';
 //       practice-documents/<practice_id>/… + an inbox item
 //   POST JSON { action: 'download', path }  -> { url }   (60 s signed URL)
 //
-// Auth: staff JWT only — the GP's existing login. Every upload is audit-
-// logged (HIQA). Abnormal lab results keep the GP-callback-only rule (shared
-// handlers enforce delivery_method 'call').
+// Auth: staff JWT (the GP's existing login) OR a per-practice bridge key in
+// the x-bridge-key header, used by the optional folder-watch script running
+// on a practice PC. Bridge keys are scoped to their practice (hash stored in
+// bridge_keys, migration 037) and can be revoked there. Every upload is
+// audit-logged (HIQA). Abnormal lab results keep the GP-callback-only rule
+// (shared handlers enforce delivery_method 'call').
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const ANON = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
@@ -40,15 +44,35 @@ async function currentPractice(auth: string) {
     .limit(1)
     .maybeSingle();
   if (!staff) return null;
-  return { admin, practiceId: staff.practice_id as string, userId: userData.user.id };
+  return { admin, practiceId: staff.practice_id as string, userId: userData.user.id, viaBridge: false };
+}
+
+/** Folder-watch bridge key (x-bridge-key header) → practice-scoped session. */
+async function bridgePractice(key: string) {
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
+  const hash = await sha256Hex(key);
+  const { data: bridge } = await admin
+    .from('bridge_keys')
+    .select('id, practice_id')
+    .eq('key_hash', hash)
+    .eq('active', true)
+    .maybeSingle();
+  if (!bridge) return null;
+  // Best-effort heartbeat; never blocks the upload.
+  admin.from('bridge_keys').update({ last_seen_at: new Date().toISOString() }).eq('id', bridge.id)
+    .then(() => {}, () => {});
+  return { admin, practiceId: bridge.practice_id as string, userId: null, viaBridge: true };
 }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
 
-  const session = await currentPractice(req.headers.get('Authorization') ?? '');
-  if (!session) return json({ error: 'Sign in first' }, 401);
-  const { admin, practiceId, userId } = session;
+  const bridgeKey = req.headers.get('x-bridge-key') ?? '';
+  const session = bridgeKey
+    ? await bridgePractice(bridgeKey)
+    : await currentPractice(req.headers.get('Authorization') ?? '');
+  if (!session) return json({ error: bridgeKey ? 'Bridge key not recognised' : 'Sign in first' }, 401);
+  const { admin, practiceId, userId, viaBridge } = session;
 
   try {
     // ── Signed download URL (path must live in this practice's folder) ──
@@ -87,7 +111,7 @@ Deno.serve(async (req) => {
           message_type: String(msg.type ?? 'other').toUpperCase(),
           healthlink_message_id: msg.healthlink_message_id ?? null,
           status: 'received',
-          bridge_agent_id: null,
+          bridge_agent_id: viaBridge ? 'folder-watch' : null,
           raw_content: raw.slice(0, 100_000),
         })
         .select('id')
@@ -103,7 +127,7 @@ Deno.serve(async (req) => {
           entity_type: 'healthlink_message',
           entity_id: logged.id,
           patient_id: null,
-          details_json: { file: name, parsed_type: type },
+          details_json: { file: name, parsed_type: type, via: viaBridge ? 'folder-watch' : 'manual' },
         });
         return json({
           ok: true,
@@ -136,7 +160,7 @@ Deno.serve(async (req) => {
       .insert({
         practice_id: practiceId,
         channel: 'upload',
-        from_name: 'Manual upload',
+        from_name: viaBridge ? 'Folder-watch bridge' : 'Manual upload',
         patient_id: patientId,
         subject: safeName,
         body: note || 'Document uploaded via Cúram web.',
@@ -156,7 +180,7 @@ Deno.serve(async (req) => {
       entity_type: 'inbox_messages',
       entity_id: inboxItem.id,
       patient_id: patientId,
-      details_json: { file: safeName, size: file.size, storage_path: path },
+        details_json: { file: safeName, size: file.size, storage_path: path, via: viaBridge ? 'folder-watch' : 'manual' },
     });
 
     return json({ ok: true, kind: 'document', inboxId: inboxItem.id, message: 'Document filed to the inbox.' });
