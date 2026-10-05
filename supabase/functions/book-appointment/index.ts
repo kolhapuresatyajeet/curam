@@ -31,14 +31,17 @@ Deno.serve(async (req) => {
   let bookedVia = bookingChannel(body.bookedVia);
 
   // Auth: master key (Síle demo) or a per-clinic VoiceHub key. A clinic key is
-  // scoped to its own practice — the body's practiceId cannot widen it.
+  // scoped to its own practice — the body's practiceId cannot widen it. Voice
+  // bookings REQUIRE a key; patient/online bookings don't send one.
   const providedKey = req.headers.get('x-booking-key') ?? '';
-  const { resolveVoiceKey } = await import('../_shared/booking-keys.ts');
-  const keyCheck = await resolveVoiceKey(admin, providedKey);
-  if (!keyCheck.ok) return json({ error: keyCheck.error }, keyCheck.status ?? 401);
   let scopedPracticeId: string | null = null;
-  if (keyCheck.scopedPracticeId) scopedPracticeId = keyCheck.scopedPracticeId;
-  if (providedKey && bookedVia === 'online') bookedVia = 'sile';
+  if (providedKey || bookedVia === 'sile') {
+    const { resolveVoiceKey } = await import('../_shared/booking-keys.ts');
+    const keyCheck = await resolveVoiceKey(admin, providedKey);
+    if (!keyCheck.ok) return json({ error: keyCheck.error }, keyCheck.status ?? 401);
+    if (keyCheck.scopedPracticeId) scopedPracticeId = keyCheck.scopedPracticeId;
+    if (bookedVia === 'online') bookedVia = 'sile';
+  }
   if (bookedVia === 'reception') {
     return json({ error: 'Reception bookings use the practice diary, not this API' }, 403);
   }

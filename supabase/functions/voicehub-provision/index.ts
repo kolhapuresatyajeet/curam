@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
       email: staff.email, // becomes the VoiceHub portal login
       address: practice.address || undefined,
       provider_name: staff.name,
-      // No phone_number: let VoiceHub buy a dedicated Irish number — the
+      // No phone_number: VoiceHub buys a dedicated Irish number — the
       // practice's existing landline is never hijacked.
       timezone: 'Europe/Dublin',
       opening_hour: opening,
@@ -88,12 +88,26 @@ Deno.serve(async (req) => {
     number_country: 'IE',
   };
 
-  const onboardRes = await fetch(ONBOARD_URL, {
-    method: 'POST',
-    headers: { 'x-api-key': provisioningKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const result = await onboardRes.json().catch(() => ({}));
+  async function callOnboard(withNumber: boolean) {
+    return fetch(ONBOARD_URL, {
+      method: 'POST',
+      headers: { 'x-api-key': provisioningKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, auto_provision_number: withNumber, number_country: withNumber ? 'IE' : undefined }),
+    });
+  }
+
+  let onboardRes = await callOnboard(true);
+  let result = await onboardRes.json().catch(() => ({}));
+
+  // VoiceHub's Twilio pool may have no voice-capable IE numbers — the spec's
+  // documented 502. Connect everything else (agent + portal) one-click and
+  // let the practice add a number in the VoiceHub portal afterwards.
+  let numberPending = false;
+  if (onboardRes.status === 502) {
+    onboardRes = await callOnboard(false);
+    result = await onboardRes.json().catch(() => ({}));
+    numberPending = onboardRes.ok;
+  }
 
   if (!onboardRes.ok) {
     // Roll back the minted key — VoiceHub rolled back its side.
@@ -124,5 +138,5 @@ Deno.serve(async (req) => {
     return json({ ...result, warning: `Connected, but saving to the practice record failed: ${updateError.message}` }, 201);
   }
 
-  return json(result, 201);
+  return json({ ...result, number_pending: numberPending }, 201);
 });

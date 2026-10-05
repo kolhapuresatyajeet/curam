@@ -6,8 +6,9 @@ import { supabase, supabaseConfigured } from '@/lib/supabase';
 export interface VoicehubProvisionResult {
   tenant_id: string;
   agent_id: string;
-  phone_number: string;
+  phone_number: string | null;
   phone_auto_provisioned: boolean;
+  number_pending?: boolean;
   portal_url: string | null;
   portal_login?: { setup_url: string; emailed: boolean } | null;
   warning?: string;

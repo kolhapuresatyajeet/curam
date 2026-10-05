@@ -17,11 +17,6 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
 
-  const bookingKey = Deno.env.get('BOOKING_API_KEY') ?? '';
-  const provided = req.headers.get('x-booking-key') ?? '';
-  if (!bookingKey) return json({ error: 'Voice booking is not configured' }, 503);
-  if (provided !== bookingKey) return json({ error: 'Voice agent key required' }, 401);
-
   const url = new URL(req.url);
   const day = url.searchParams.get('date') ?? new Date().toISOString().slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return json({ error: 'date must be YYYY-MM-DD' }, 400);

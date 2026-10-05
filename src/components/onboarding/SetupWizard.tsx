@@ -175,7 +175,7 @@ function StepVoicehub({ onDone }: { onDone: () => void }) {
       appStore.updatePractice({
         voicehubAgentId: data.agent_id,
         voicehubTenantId: data.tenant_id,
-        voicehubPhone: data.phone_number,
+        voicehubPhone: data.phone_number ?? '',
         voicehubConnectedAt: new Date().toISOString(),
       });
       setResult(data);
@@ -190,10 +190,17 @@ function StepVoicehub({ onDone }: { onDone: () => void }) {
           <p className="flex items-center gap-1.5 font-medium">
             <Check size={13} /> Your AI receptionist is live
           </p>
-          <p className="mt-1 text-teal-700">
-            Patients can call <span className="font-semibold">{result.phone_number}</span> right now — bookings land
-            straight in your Cúram diary.
-          </p>
+          {result.phone_number ? (
+            <p className="mt-1 text-teal-700">
+              Patients can call <span className="font-semibold">{result.phone_number}</span> right now — bookings land
+              straight in your Cúram diary.
+            </p>
+          ) : (
+            <p className="mt-1 text-teal-700">
+              Your receptionist agent and portal are ready. No Irish phone number could be reserved automatically —
+              pick one in the VoiceHub portal (or ask VoiceHub to assign one) and calls will reach the agent.
+            </p>
+          )}
         </div>
         {result.portal_login?.setup_url && (
           <a href={result.portal_login.setup_url} target="_blank" rel="noreferrer">
