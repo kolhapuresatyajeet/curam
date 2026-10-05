@@ -13,6 +13,7 @@ import type {
   CdmEnrolment,
   CdmReview,
   Consultation,
+  InboxMessage,
   Invoice,
   LabResult,
   Patient,
@@ -269,8 +270,11 @@ export const appStore = {
     }));
     audit('read', 'inbox_message', messageId);
   },
-  sendInbox(input: { fromName: string; subject: string; body: string; patientId?: string }) {
-    const message = {
+  /** Replace the inbox list wholesale (hydration from Supabase on sign-in). */
+  setInbox(messages: InboxMessage[]) {
+    setState((current) => ({ ...current, inbox: messages }));
+  },
+  sendInbox(input: { fromName: string; subject: string; body: string; patientId?: string }) {    const message = {
       id: id('m'),
       practiceId: state.practice.id,
       channel: 'internal' as const,

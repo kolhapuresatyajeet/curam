@@ -77,6 +77,39 @@ async function hydrate(
         voicehubConnectedAt: practice.voicehub_connected_at ?? null,
         onboardingDone: practice.onboarding_done ?? [],
       });
+
+      // Inbox hydration (live) — one list for HealthLink/Healthmail/patient
+      // app/Síle drafts/uploads. Demo mode keeps the seed inbox.
+      if (supabase) {
+        const { data: inboxRows } = await supabase
+          .from('inbox_messages')
+          .select('*')
+          .eq('practice_id', practice.id)
+          .order('received_at', { ascending: false })
+          .limit(200);
+        if (inboxRows) {
+          appStore.setInbox(
+            (inboxRows as Record<string, any>[]).map((row) => ({
+              id: row.id,
+              practiceId: row.practice_id,
+              channel: row.channel ?? 'internal',
+              fromName: row.from_name ?? '',
+              fromAddress: row.from_address ?? '',
+              patientId: row.patient_id ?? undefined,
+              subject: row.subject ?? '',
+              body: row.body ?? '',
+              messageType: row.message_type ?? 'internal',
+              assignedTo: row.assigned_to ?? undefined,
+              read: Boolean(row.read),
+              urgent: Boolean(row.urgent),
+              receivedAt: row.received_at ?? '',
+              attachmentPath: row.attachment_path ?? undefined,
+              attachmentName: row.attachment_name ?? undefined,
+              attachmentSize: row.attachment_size ?? undefined,
+            })),
+          );
+        }
+      }
     }
     appStore.login(staff.id);
     snapshot = {

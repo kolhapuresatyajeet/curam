@@ -44,7 +44,7 @@ export type AppointmentStatus =
 export type BillingSource = 'gms' | 'private' | 'vhi' | 'laya' | 'irish_life' | 'aviva';
 export type InvoiceStatus = 'unbilled' | 'invoiced' | 'paid' | 'partial' | 'rejected';
 export type PcrsStatus = 'staged' | 'submitted' | 'accepted' | 'rejected' | 'paid';
-export type InboxChannel = 'healthlink' | 'healthmail' | 'patient_app' | 'sile_draft' | 'internal';
+export type InboxChannel = 'healthlink' | 'healthmail' | 'patient_app' | 'sile_draft' | 'internal' | 'upload';
 export type MessageType =
   | 'lab_result'
   | 'discharge'
@@ -53,7 +53,8 @@ export type MessageType =
   | 'patient_msg'
   | 'healthmail'
   | 'sile_draft'
-  | 'internal';
+  | 'internal'
+  | 'document';
 
 export type ConsultationTemplate = 'gp_consult' | 'phone_triage' | 'nurse_clinic' | 'home_visit';
 export type ConsultationStatus = 'draft' | 'signed';
@@ -317,6 +318,9 @@ export interface InboxMessage {
   read: boolean;
   urgent: boolean;
   receivedAt: string;
+  attachmentPath?: string;
+  attachmentName?: string;
+  attachmentSize?: number;
 }
 
 export interface SmsLog {
