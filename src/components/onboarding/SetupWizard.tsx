@@ -301,8 +301,9 @@ function StepVoicehub({ onDone }: { onDone: () => void }) {
           <input className={inputClass} value={ownNumber} onChange={(e) => setOwnNumber(e.target.value)} placeholder="+353 1 265 8834" />
         </Field>
         <p className="-mt-2 text-[11px] text-slate-400">
-          Only a number already on VoiceHub's Twilio account can be used. Leave blank and VoiceHub will assign a
-          dedicated Irish number — you can change it in their portal later.
+          Buy the number first in VoiceHub's Twilio console, then enter it here — it's imported and bound to your
+          receptionist, never purchased by Cúram. Leave blank and VoiceHub will assign a dedicated Irish number
+          instead (you can change it in their portal later).
         </p>
         <Field label="Transfer calls to a human (optional)">
           <input className={inputClass} value={transferNumber} onChange={(e) => setTransferNumber(e.target.value)} placeholder="+353 86 123 4567" />

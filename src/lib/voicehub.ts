@@ -8,6 +8,9 @@ export interface VoicehubProvisionResult {
   agent_id: string;
   phone_number: string | null;
   phone_auto_provisioned: boolean;
+  phone_purchased?: boolean;
+  human_line_number?: string | null;
+  human_line_provisioned?: boolean;
   number_pending?: boolean;
   portal_url: string | null;
   portal_login?: { setup_url: string; emailed: boolean } | null;

@@ -92,6 +92,10 @@ Deno.serve(async (req) => {
       // VoiceHub buys a dedicated Irish number; the practice's existing
       // landline is never hijacked.
       phone_number: validNumber ?? undefined,
+      // Manual-buy model: a GP-supplied number must be adopted as-is — never
+      // purchase it (spec §3c STRICT). Only auto-provisioned numbers may be
+      // bought by VoiceHub.
+      purchase_number: validNumber ? false : undefined,
       human_transfer_number: validTransfer ?? undefined,
       timezone: 'Europe/Dublin',
       opening_hour: opening,
@@ -136,7 +140,8 @@ Deno.serve(async (req) => {
     await admin.from('booking_keys').delete().eq('key_hash', keyHash);
     const message =
       onboardRes.status === 503 ? 'VoiceHub provisioning is temporarily unavailable — try again shortly' :
-      onboardRes.status === 502 && validNumber ? `Your number ${validNumber} could not be imported — it must already be a Twilio number on VoiceHub's account, or leave it blank for VoiceHub to assign one` :
+      (onboardRes.status === 400 || onboardRes.status === 502) && validNumber
+        ? `Your number ${validNumber} could not be used — it must be bought in VoiceHub's Twilio console first (or leave the field blank and let VoiceHub assign one). VoiceHub said: ${String(result?.error ?? 'number not on their account').slice(0, 120)}` :
       onboardRes.status === 502 ? 'No Irish phone numbers available right now — try again shortly' :
       onboardRes.status === 401 ? 'VoiceHub rejected the provisioning key — check VOICEHUB_PROVISIONING_API_KEY' :
       (result?.error as string) ?? `VoiceHub provisioning failed (HTTP ${onboardRes.status})`;
