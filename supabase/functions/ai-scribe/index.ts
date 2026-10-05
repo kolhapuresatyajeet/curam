@@ -140,7 +140,9 @@ Respond with JSON only: {"subjective": string, "objective": string, "assessment"
     },
     body: JSON.stringify({
       model: STRUCTURE_MODEL,
-      max_tokens: 1200,
+      // Headroom for the dialogue echo: the labeled transcript roughly doubles
+      // the output. A truncated response fails JSON parsing, losing the draft.
+      max_tokens: 4096,
       system: [
         { type: 'text', text: system },
         // Cached: patient context repeats across the practice's consults each session.
