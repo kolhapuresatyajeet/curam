@@ -146,6 +146,7 @@ function StepVoicehub({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [showManual, setShowManual] = useState(false);
+  const [ownNumber, setOwnNumber] = useState('');
   const [result, setResult] = useState<VoicehubProvisionResult | null>(null);
   const [agentId, setAgentId] = useState(state.practice.voicehubAgentId);
   const [phone, setPhone] = useState(state.practice.voicehubPhone);
@@ -169,7 +170,7 @@ function StepVoicehub({ onDone }: { onDone: () => void }) {
     void (async () => {
       setBusy(true);
       setError('');
-      const { data, error: provisionError } = await provisionVoicehub();
+      const { data, error: provisionError } = await provisionVoicehub(ownNumber.trim() || undefined);
       setBusy(false);
       if (provisionError || !data) return setError(provisionError?.message ?? 'Provisioning failed');
       appStore.updatePractice({
@@ -294,6 +295,15 @@ function StepVoicehub({ onDone }: { onDone: () => void }) {
           </AppButton>
         </div>
       )}
+      <div className="grid gap-3">
+        <Field label="Use your own phone number (optional)">
+          <input className={inputClass} value={ownNumber} onChange={(e) => setOwnNumber(e.target.value)} placeholder="+353 1 265 8834" />
+        </Field>
+        <p className="-mt-2 text-[11px] text-slate-400">
+          Only a number already on VoiceHub's Twilio account can be used. Leave blank and VoiceHub will assign a
+          dedicated Irish number — you can change it in their portal later.
+        </p>
+      </div>
       <AppButton variant="primary" disabled={busy} onClick={provision}>
         {busy ? 'Setting up your receptionist…' : 'Set up my AI receptionist'} <ArrowRight size={13} />
       </AppButton>

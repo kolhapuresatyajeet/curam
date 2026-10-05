@@ -70,21 +70,30 @@ Deno.serve(async (req) => {
   const opening = times[0] ?? '09:00';
   const closing = times[1] ?? '17:00';
 
+  // Optional: the clinic's own number to import (must already be a Twilio
+  // number on VoiceHub's account — e.g. ported or bought there). If omitted,
+  // VoiceHub buys a new Irish number.
+  const ownNumber = String(body.phoneNumber ?? '').replace(/[\s()-]/g, '');
+  const validNumber = /^\+?\d{9,15}$/.test(ownNumber) ? (ownNumber.startsWith('+') ? ownNumber : `+${ownNumber}`) : null;
+  if (body.phoneNumber && !validNumber) return json({ error: 'Phone number looks invalid — use international format, e.g. +35312658834' }, 400);
+
   const payload = {
     practice: {
       name: practice.name,
       email: staff.email, // becomes the VoiceHub portal login
       address: practice.address || undefined,
       provider_name: staff.name,
-      // No phone_number: VoiceHub buys a dedicated Irish number — the
-      // practice's existing landline is never hijacked.
+      // Explicit number → imported and bound to the agent. No number →
+      // VoiceHub buys a dedicated Irish number; the practice's existing
+      // landline is never hijacked.
+      phone_number: validNumber ?? undefined,
       timezone: 'Europe/Dublin',
       opening_hour: opening,
       closing_hour: closing,
       slot_duration_mins: 15,
     },
     curam: { api_key: apiKey, practice_id: practice.id },
-    auto_provision_number: true,
+    auto_provision_number: !validNumber,
     number_country: 'IE',
   };
 
@@ -92,7 +101,12 @@ Deno.serve(async (req) => {
     return fetch(ONBOARD_URL, {
       method: 'POST',
       headers: { 'x-api-key': provisioningKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...payload, auto_provision_number: withNumber, number_country: withNumber ? 'IE' : undefined }),
+      body: JSON.stringify({
+        ...payload,
+        practice: { ...payload.practice, phone_number: withNumber ? payload.practice.phone_number : undefined },
+        auto_provision_number: withNumber && !validNumber,
+        number_country: withNumber && !validNumber ? 'IE' : undefined,
+      }),
     });
   }
 
@@ -101,9 +115,11 @@ Deno.serve(async (req) => {
 
   // VoiceHub's Twilio pool may have no voice-capable IE numbers — the spec's
   // documented 502. Connect everything else (agent + portal) one-click and
-  // let the practice add a number in the VoiceHub portal afterwards.
+  // let the practice add a number in the VoiceHub portal afterwards. If the
+  // clinic requested a SPECIFIC number and it failed to import, don't silently
+  // drop it — report instead.
   let numberPending = false;
-  if (onboardRes.status === 502) {
+  if (onboardRes.status === 502 && !validNumber) {
     onboardRes = await callOnboard(false);
     result = await onboardRes.json().catch(() => ({}));
     numberPending = onboardRes.ok;
@@ -114,6 +130,7 @@ Deno.serve(async (req) => {
     await admin.from('booking_keys').delete().eq('key_hash', keyHash);
     const message =
       onboardRes.status === 503 ? 'VoiceHub provisioning is temporarily unavailable — try again shortly' :
+      onboardRes.status === 502 && validNumber ? `Your number ${validNumber} could not be imported — it must already be a Twilio number on VoiceHub's account, or leave it blank for VoiceHub to assign one` :
       onboardRes.status === 502 ? 'No Irish phone numbers available right now — try again shortly' :
       onboardRes.status === 401 ? 'VoiceHub rejected the provisioning key — check VOICEHUB_PROVISIONING_API_KEY' :
       (result?.error as string) ?? `VoiceHub provisioning failed (HTTP ${onboardRes.status})`;
