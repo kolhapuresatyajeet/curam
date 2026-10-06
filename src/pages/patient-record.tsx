@@ -206,13 +206,23 @@ export default function PatientRecordPage() {
       )}
 
       {tab === 'Prescriptions' && (
-        <div className="surface divide-y rounded-xl">
-          {rxs.map((rx) => (
-            <div key={rx.id} className="px-4 py-3 text-xs">
-              <span className="font-semibold text-slate-700">{rx.drugName}</span> {rx.dose} {rx.frequency}
-              {rx.controlled && <Badge tone="coral">Controlled</Badge>}
-            </div>
-          ))}
+        <div>
+          <div className="mb-3">
+            <AppButton size="sm" variant="primary" onClick={() => setLocation(`/patients/${patient.id}/consultation?new=1`)}>
+              + Prescribe (open consultation)
+            </AppButton>
+            <span className="ml-2 text-[10px] text-slate-400">Prescriptions are created during a consultation for audit trail.</span>
+          </div>
+          <div className="surface divide-y rounded-xl">
+            {rxs.map((rx) => (
+              <div key={rx.id} className="px-4 py-3 text-xs">
+                <span className="font-semibold text-slate-700">{rx.drugName}</span> {rx.dose} {rx.frequency}
+                {rx.controlled && <Badge tone="coral">Controlled</Badge>}
+                <span className="ml-2 text-slate-400">{rx.status}</span>
+              </div>
+            ))}
+            {!rxs.length && <div className="px-4 py-3 text-xs text-slate-400">No prescriptions on record.</div>}
+          </div>
         </div>
       )}
 
@@ -225,12 +235,25 @@ export default function PatientRecordPage() {
       )}
 
       {tab === 'Referrals' && (
-        <div className="surface divide-y rounded-xl">
-          {refs.map((item) => (
-            <div key={item.id} className="px-4 py-3 text-xs">
-              {item.specialty} · {item.hospital} · {item.status}
-            </div>
-          ))}
+        <div>
+          <div className="mb-3">
+            <AppButton size="sm" variant="primary" onClick={() => setLocation(`/patients/${patient.id}/consultation?new=1`)}>
+              + Draft referral (open consultation)
+            </AppButton>
+            <span className="ml-2 text-[10px] text-slate-400">Referrals are drafted during a consultation, then approved on the Referrals page.</span>
+          </div>
+          <div className="surface divide-y rounded-xl">
+            {refs.map((item) => (
+              <div key={item.id} className="flex items-center gap-2 px-4 py-3 text-xs">
+                <span className="font-semibold text-slate-700">{item.specialty}</span>
+                <span className="text-slate-500">· {item.hospital}</span>
+                <Badge tone={item.status === 'draft' ? 'amber' : 'teal'}>{item.status}</Badge>
+                {item.sileDrafted && <Badge tone="purple">Síle draft</Badge>}
+                {item.notes && <span className="text-slate-400">· {item.notes.slice(0, 60)}{item.notes.length > 60 ? '…' : ''}</span>}
+              </div>
+            ))}
+            {!refs.length && <div className="px-4 py-3 text-xs text-slate-400">No referrals on record.</div>}
+          </div>
         </div>
       )}
 

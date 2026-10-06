@@ -7,6 +7,9 @@ import { id, nowIso } from '@/lib/utils';
 import { consultationStore, useConsultationStore } from '@/stores/consultationStore';
 import { appStore, useAppState, useSessionStaff } from '@/stores/appStore';
 import { CONSULTATION_TEMPLATES } from '@/lib/consultation-templates';
+import { canApprovePrescriptions } from '@/lib/permissions';
+import { insertPrescription, insertReferral } from '@/lib/db';
+import { supabaseConfigured } from '@/lib/supabase';
 import type { Consultation } from '@/types/domain';
 
 export default function ConsultationPage() {
@@ -198,6 +201,19 @@ export default function ConsultationPage() {
             </AppButton>
           </div>
         </div>
+
+        <PrescribePanel
+          patientId={patient.id}
+          staffId={staff.id}
+          staffRole={staff.role}
+          consultationId={note.id}
+          pharmacyHealthmail={patient.pharmacyHealthmail}
+        />
+        <ReferPanel
+          patientId={patient.id}
+          staffId={staff.id}
+          consultationId={note.id}
+        />
       </div>
       <aside className="surface rounded-xl p-4">
         <h2 className="text-sm font-semibold text-slate-800">Síle scribe</h2>
@@ -379,6 +395,272 @@ export default function ConsultationPage() {
           </div>
         )}
       </aside>
+    </div>
+  );
+}
+
+// ─── Prescribe panel (GP only) ───────────────────────────────────────────────
+
+const CONTROLLED_DRUGS = ['morphine', 'oxycodone', 'fentanyl', 'codeine', 'diazepam', 'alprazolam', 'zolpidem', 'methylphenidate', 'pregabalin'];
+
+function PrescribePanel({
+  patientId,
+  staffId,
+  staffRole,
+  consultationId,
+  pharmacyHealthmail,
+}: {
+  patientId: string;
+  staffId: string;
+  staffRole: string;
+  consultationId: string;
+  pharmacyHealthmail: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [drugName, setDrugName] = useState('');
+  const [dose, setDose] = useState('');
+  const [frequency, setFrequency] = useState('');
+  const [durationMonths, setDurationMonths] = useState(3);
+  const [pharmacy, setPharmacy] = useState(pharmacyHealthmail);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  if (!canApprovePrescriptions(staffRole as any)) return null;
+
+  const controlled = CONTROLLED_DRUGS.some((d) => drugName.toLowerCase().includes(d));
+
+  const save = async () => {
+    if (!drugName.trim()) { setError('Drug name is required'); return; }
+    if (!dose.trim()) { setError('Dose is required'); return; }
+    if (!frequency.trim()) { setError('Frequency is required'); return; }
+    setError('');
+    setSaving(true);
+
+    const rx = appStore.addPrescription({
+      patientId,
+      staffId,
+      consultationId,
+      drugName: drugName.trim(),
+      dose: dose.trim(),
+      frequency: frequency.trim(),
+      durationMonths,
+      pharmacyHealthmail: pharmacy,
+      status: 'active',
+      refillsRemaining: 0,
+      controlled,
+    });
+
+    if (supabaseConfigured) {
+      const result = await insertPrescription({ ...rx });
+      if (result.error) {
+        setError(result.error.message);
+        setSaving(false);
+        return;
+      }
+    }
+
+    setSaving(false);
+    setSuccess(`${drugName} prescribed`);
+    setDrugName('');
+    setDose('');
+    setFrequency('');
+    setDurationMonths(3);
+    setTimeout(() => setSuccess(''), 3000);
+  };
+
+  if (!open) {
+    return (
+      <div className="mt-4">
+        <AppButton size="sm" onClick={() => setOpen(true)}>
+          + Prescribe medication
+        </AppButton>
+        {success && <span className="ml-2 text-[11px] text-teal-700">✓ {success}</span>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="surface mt-4 rounded-xl p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">New prescription</h3>
+        <button type="button" className="text-xs text-slate-400 hover:text-slate-600" onClick={() => setOpen(false)}>Close</button>
+      </div>
+      {controlled && (
+        <p className="mb-2 rounded-md bg-coral-50 px-3 py-2 text-[11px] text-red-700 bg-red-50">
+          ⚠ Controlled substance detected — second check required per practice protocol.
+        </p>
+      )}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Field label="Drug name">
+          <input className={inputClass} value={drugName} onChange={(e) => setDrugName(e.target.value)} placeholder="e.g. Metformin" />
+        </Field>
+        <Field label="Dose">
+          <input className={inputClass} value={dose} onChange={(e) => setDose(e.target.value)} placeholder="e.g. 500mg" />
+        </Field>
+        <Field label="Frequency">
+          <input className={inputClass} value={frequency} onChange={(e) => setFrequency(e.target.value)} placeholder="e.g. Twice daily (BD)" />
+        </Field>
+        <Field label="Duration (months)">
+          <input className={inputClass} type="number" min={1} max={12} value={durationMonths} onChange={(e) => setDurationMonths(Number(e.target.value))} />
+        </Field>
+        <Field label="Pharmacy Healthmail">
+          <input className={inputClass} value={pharmacy} onChange={(e) => setPharmacy(e.target.value)} placeholder="pharmacy@healthmail.ie" />
+        </Field>
+      </div>
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      {success && <p className="mt-2 text-xs text-teal-700">✓ {success}</p>}
+      <div className="mt-3 flex gap-2">
+        <AppButton size="sm" variant="primary" disabled={saving} onClick={() => void save()}>
+          {saving ? 'Saving…' : 'Prescribe'}
+        </AppButton>
+        <AppButton size="sm" onClick={() => setOpen(false)}>Cancel</AppButton>
+      </div>
+    </div>
+  );
+}
+
+// ─── Refer panel ─────────────────────────────────────────────────────────────
+
+const IRISH_HOSPITALS = [
+  "St James's Hospital",
+  'Mater Misericordiae',
+  "St Vincent's University Hospital",
+  'Beaumont Hospital',
+  'Tallaght University Hospital',
+  'Connolly Hospital',
+  'Rotunda Hospital',
+  'Coombe Hospital',
+  'National Maternity Hospital',
+  'Community / Primary Care',
+  'Other',
+];
+
+const SPECIALTIES = [
+  'Cardiology',
+  'Dermatology',
+  'Dietetics',
+  'ENT',
+  'Endocrinology',
+  'Gastroenterology',
+  'General Surgery',
+  'Geriatrics',
+  'Gynaecology',
+  'Haematology',
+  'Nephrology',
+  'Neurology',
+  'Obstetrics',
+  'Oncology',
+  'Ophthalmology',
+  'Orthopaedics',
+  'Pain Management',
+  'Palliative Care',
+  'Physiotherapy',
+  'Psychiatry',
+  'Radiology',
+  'Respiratory',
+  'Rheumatology',
+  'Urology',
+  'Other',
+];
+
+function ReferPanel({
+  patientId,
+  staffId,
+  consultationId,
+}: {
+  patientId: string;
+  staffId: string;
+  consultationId: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [specialty, setSpecialty] = useState('');
+  const [hospital, setHospital] = useState('');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const save = async () => {
+    if (!specialty) { setError('Specialty is required'); return; }
+    if (!hospital) { setError('Hospital is required'); return; }
+    if (!notes.trim()) { setError('Clinical notes / reason for referral is required'); return; }
+    setError('');
+    setSaving(true);
+
+    const ref = appStore.addReferral({
+      patientId,
+      staffId,
+      consultationId,
+      specialty,
+      hospital,
+      notes: notes.trim(),
+      status: 'draft',
+      sileDrafted: false,
+    });
+
+    if (supabaseConfigured) {
+      const result = await insertReferral({ ...ref });
+      if (result.error) {
+        setError(result.error.message);
+        setSaving(false);
+        return;
+      }
+    }
+
+    setSaving(false);
+    setSuccess(`${specialty} referral drafted → Referrals page for approval`);
+    setSpecialty('');
+    setHospital('');
+    setNotes('');
+    setTimeout(() => setSuccess(''), 4000);
+  };
+
+  if (!open) {
+    return (
+      <div className="mt-3">
+        <AppButton size="sm" onClick={() => setOpen(true)}>
+          + Draft referral
+        </AppButton>
+        {success && <span className="ml-2 text-[11px] text-teal-700">✓ {success}</span>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="surface mt-3 rounded-xl p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">New referral</h3>
+        <button type="button" className="text-xs text-slate-400 hover:text-slate-600" onClick={() => setOpen(false)}>Close</button>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Field label="Specialty">
+          <select className={inputClass} value={specialty} onChange={(e) => setSpecialty(e.target.value)}>
+            <option value="">Select…</option>
+            {SPECIALTIES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </Field>
+        <Field label="Hospital">
+          <select className={inputClass} value={hospital} onChange={(e) => setHospital(e.target.value)}>
+            <option value="">Select…</option>
+            {IRISH_HOSPITALS.map((h) => <option key={h} value={h}>{h}</option>)}
+          </select>
+        </Field>
+      </div>
+      <Field label="Clinical notes / reason for referral">
+        <textarea className={`${inputClass} mt-1 h-24 py-2`} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Clinical history, findings, reason for referral…" />
+      </Field>
+      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      {success && <p className="mt-2 text-xs text-teal-700">✓ {success}</p>}
+      <div className="mt-3 flex gap-2">
+        <AppButton size="sm" variant="primary" disabled={saving} onClick={() => void save()}>
+          {saving ? 'Saving…' : 'Save as draft'}
+        </AppButton>
+        <AppButton size="sm" onClick={() => setOpen(false)}>Cancel</AppButton>
+      </div>
+      <p className="mt-2 text-[10px] text-slate-400">
+        Drafts appear on the Referrals page → GP clicks "Approve & send" to submit via HealthLink.
+      </p>
     </div>
   );
 }

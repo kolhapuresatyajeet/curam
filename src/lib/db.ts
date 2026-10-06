@@ -216,6 +216,65 @@ export async function updateWaitingRoom(
   return { error };
 }
 
+// ---------- Prescriptions ----------
+
+export async function insertPrescription(input: {
+  id: string;
+  patientId: string;
+  staffId: string;
+  consultationId?: string;
+  drugName: string;
+  dose: string;
+  frequency: string;
+  durationMonths: number;
+  pharmacyHealthmail: string;
+  controlled: boolean;
+}) {
+  if (!supabase) return { error: new Error('Supabase is not configured') };
+  const { error } = await supabase.from('prescriptions').insert({
+    id: input.id,
+    patient_id: input.patientId,
+    staff_id: input.staffId,
+    consultation_id: input.consultationId ?? null,
+    drug_name: input.drugName,
+    dose: input.dose,
+    frequency: input.frequency,
+    duration_months: input.durationMonths,
+    pharmacy_healthmail: input.pharmacyHealthmail,
+    controlled: input.controlled,
+    status: 'active',
+    refills_remaining: 0,
+  });
+  return { error };
+}
+
+// ---------- Referrals ----------
+
+export async function insertReferral(input: {
+  id: string;
+  patientId: string;
+  staffId: string;
+  consultationId?: string;
+  specialty: string;
+  hospital: string;
+  notes: string;
+  sileDrafted: boolean;
+}) {
+  if (!supabase) return { error: new Error('Supabase is not configured') };
+  const { error } = await supabase.from('referrals').insert({
+    id: input.id,
+    patient_id: input.patientId,
+    staff_id: input.staffId,
+    consultation_id: input.consultationId ?? null,
+    specialty: input.specialty,
+    hospital: input.hospital,
+    notes: input.notes,
+    status: 'draft',
+    sile_drafted: input.sileDrafted,
+  });
+  return { error };
+}
+
 // ---------- CDM programme ----------
 
 export async function fetchCdmEnrolments(): Promise<CdmEnrolment[]> {

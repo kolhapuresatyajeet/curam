@@ -17,7 +17,9 @@ import type {
   Invoice,
   LabResult,
   Patient,
+  Prescription,
   PracticeState,
+  Referral,
   RepeatRxRequest,
   Staff,
   WaitingRoomEntry,
@@ -455,6 +457,18 @@ export const appStore = {
       ),
     }));
     audit('submit', 'pcrs_claim', claimId);
+  },
+  addPrescription(input: Omit<Prescription, 'id'>) {
+    const rx: Prescription = { ...input, id: id('rx') };
+    setState((current) => ({ ...current, prescriptions: [rx, ...current.prescriptions] }));
+    audit('create', 'prescription', rx.id, rx.patientId);
+    return rx;
+  },
+  addReferral(input: Omit<Referral, 'id'>) {
+    const ref: Referral = { ...input, id: id('ref') };
+    setState((current) => ({ ...current, referrals: [ref, ...current.referrals] }));
+    audit('create', 'referral', ref.id, ref.patientId);
+    return ref;
   },
   updateReferralStatus(referralId: string, status: PracticeState['referrals'][number]['status']) {
     setState((current) => ({
