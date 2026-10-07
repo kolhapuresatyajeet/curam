@@ -6,7 +6,7 @@ import { fetchPatients } from '@/lib/db';
 import { supabaseConfigured } from '@/lib/supabase';
 import { ageFromDob, formatIrishDate } from '@/lib/utils';
 import { appStore, useAppState } from '@/stores/appStore';
-import { patientName } from '@/types/domain';
+import { patientName, RELATIONSHIP_LABEL } from '@/types/domain';
 
 export default function PatientsPage() {
   const state = useAppState();
@@ -71,6 +71,9 @@ export default function PatientsPage() {
                     DOB {formatIrishDate(patient.dob)} · age {ageFromDob(patient.dob)} · {patient.medicalCardType === 'gms' ? 'GMS' : patient.insurer ?? 'Private'}
                   </span>
                 </span>
+                {!patient.isPrimary && (
+                  <Badge tone="slate">{RELATIONSHIP_LABEL[patient.relationship]}</Badge>
+                )}
                 {tags.length > 0 && <Badge tone={patient.colour}>{tags.join(' · ')}</Badge>}
                 <ChevronRight size={15} className="text-slate-300" />
               </button>

@@ -21,6 +21,15 @@ export type Tone = 'teal' | 'blue' | 'amber' | 'purple' | 'coral' | 'slate';
 export type MedicalCardType = 'gms' | 'gp_visit' | 'none';
 export type SmokingStatus = 'never' | 'ex' | 'current' | 'unknown';
 export type Gender = 'female' | 'male' | 'other' | 'unknown';
+export type HouseholdRelationship = 'self' | 'spouse' | 'child' | 'parent' | 'other';
+
+export const RELATIONSHIP_LABEL: Record<HouseholdRelationship, string> = {
+  self: 'Main member',
+  spouse: 'Spouse / partner',
+  child: 'Child',
+  parent: 'Parent',
+  other: 'Family member',
+};
 
 export type AppointmentType =
   | 'routine'
@@ -131,6 +140,10 @@ export interface Patient {
   smokingStatus: SmokingStatus;
   gdprConsent: boolean;
   sileConsent: boolean;
+  /** Shared across the main member and family on the same phone. */
+  householdId: string;
+  isPrimary: boolean;
+  relationship: HouseholdRelationship;
   insurer?: BillingSource;
   chronicConditions?: string[];
   colour: Tone;

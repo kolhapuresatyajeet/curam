@@ -53,16 +53,45 @@ Deno.serve(async (req) => {
   let patientId = body.patientId as string | undefined;
   let practiceId = (scopedPracticeId ?? body.practiceId) as string | undefined;
 
-  if (!patientId) {
-    const phone = String(body.phone ?? body.mobile ?? "");
-    if (phone) {
-      const { matchPatientByMobile } = await import("../_shared/phone.ts");
-      const matched = await matchPatientByMobile(admin, phone);
-      if (!matched.patient)
-        return json({ error: matched.error }, matched.status);
-      patientId = matched.patient.id;
-      practiceId = matched.patient.practice_id;
-      if (bookedVia === "sile" && !matched.patient.sile_consent) {
+  const phone = String(body.phone ?? body.mobile ?? "");
+  if (phone) {
+    const { householdMember, matchPatientsByMobile } = await import(
+      "../_shared/phone.ts"
+    );
+    const matched = await matchPatientsByMobile(admin, phone);
+    if (matched.status !== 200)
+      return json({ error: matched.error }, matched.status);
+    const household = matched.patients.filter(
+      (p) => !scopedPracticeId || p.practice_id === scopedPracticeId,
+    );
+    if (!household.length) return json({ error: "Patient not found" }, 404);
+    const members = household.map(householdMember);
+
+    if (patientId) {
+      const chosen = household.find((p) => p.id === patientId);
+      if (!chosen) {
+        return json(
+          {
+            error: "That person is not registered on this mobile number",
+            patients: members,
+          },
+          409,
+        );
+      }
+      practiceId = chosen.practice_id;
+      if (bookedVia === "sile" && !chosen.sile_consent) {
+        return json(
+          {
+            error:
+              "This patient has not consented to Síle. A receptionist must book.",
+          },
+          403,
+        );
+      }
+    } else if (household.length === 1) {
+      patientId = household[0].id;
+      practiceId = household[0].practice_id;
+      if (bookedVia === "sile" && !household[0].sile_consent) {
         return json(
           {
             error:
@@ -72,6 +101,16 @@ Deno.serve(async (req) => {
         );
       }
     } else {
+      return json(
+        {
+          error:
+            "Several people share this number. Pass patientId for the chosen person.",
+          patients: members,
+        },
+        409,
+      );
+    }
+  } else if (!patientId) {
       const first = String(
         body.patientFirstName ?? body.firstName ?? "",
       ).trim();
@@ -117,7 +156,6 @@ Deno.serve(async (req) => {
           403,
         );
       }
-    }
   }
 
   if (!practiceId) {

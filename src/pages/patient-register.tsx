@@ -1,42 +1,59 @@
-import { useState } from 'react';
-import { useLocation } from 'wouter';
+import { useMemo, useState } from 'react';
+import { useLocation, useSearch } from 'wouter';
 import { AppButton, Field, SectionTitle, inputClass } from '@/components/shared/ui';
 import { insertPatient } from '@/lib/db';
 import { supabaseConfigured } from '@/lib/supabase';
-import { appStore } from '@/stores/appStore';
-import type { Gender, MedicalCardType, SmokingStatus } from '@/types/domain';
+import { appStore, useAppState } from '@/stores/appStore';
+import { patientName, type Gender, type HouseholdRelationship, type MedicalCardType, type SmokingStatus } from '@/types/domain';
 
 export default function PatientRegisterPage() {
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  const state = useAppState();
   const [error, setError] = useState('');
+
+  const householdId = useMemo(() => new URLSearchParams(search).get('household') ?? '', [search]);
+  const primary = state.patients.find((p) => p.id === householdId || (p.householdId === householdId && p.isPrimary));
+
   const [form, setForm] = useState({
     firstName: '',
-    lastName: '',
+    lastName: primary?.lastName ?? '',
     dob: '',
     gender: 'unknown' as Gender,
     ppsNumber: '',
     gmsNumber: '',
     ihiNumber: '',
-    medicalCardType: 'none' as MedicalCardType,
-    phone: '',
+    medicalCardType: (primary?.medicalCardType ?? 'none') as MedicalCardType,
+    phone: primary?.phone ?? '',
     email: '',
-    address: '',
-    eircode: '',
-    pharmacyName: '',
-    pharmacyHealthmail: '',
+    address: primary?.address ?? '',
+    eircode: primary?.eircode ?? '',
+    pharmacyName: primary?.pharmacyName ?? '',
+    pharmacyHealthmail: primary?.pharmacyHealthmail ?? '',
     allergies: 'NKDA',
     smokingStatus: 'unknown' as SmokingStatus,
     gdprConsent: false,
-    sileConsent: false,
+    sileConsent: primary?.sileConsent ?? false,
+    relationship: 'child' as HouseholdRelationship,
   });
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  const addingFamily = Boolean(primary);
+  const childUsesGuardianPhone = addingFamily && form.relationship === 'child';
+
   return (
     <div className="fade-in max-w-3xl">
-      <SectionTitle title="Register patient" description="Irish identifiers, pharmacy, consent. All writes are audited." />
+      <SectionTitle
+        title={addingFamily ? `Add family member · ${patientName(primary!)}` : 'Register patient'}
+        description={
+          addingFamily
+            ? 'Adults keep their own mobile. Children without a phone are reachable on the main member’s number when that person calls the practice.'
+            : 'Irish identifiers, pharmacy, consent. All writes are audited.'
+        }
+      />
       <form
         className="surface grid gap-3 rounded-xl p-5 sm:grid-cols-2"
         onSubmit={(event) => {
@@ -44,7 +61,13 @@ export default function PatientRegisterPage() {
           void (async () => {
             if (!form.gdprConsent) return;
             setError('');
-            const created = appStore.registerPatient(form);
+            const created = appStore.registerPatient({
+              ...form,
+              phone: childUsesGuardianPhone ? (form.phone || primary?.phone || '') : form.phone,
+              householdId: primary?.householdId ?? primary?.id ?? '',
+              isPrimary: !addingFamily,
+              relationship: addingFamily ? form.relationship : 'self',
+            });
             if (supabaseConfigured) {
               const { error: saveError } = await insertPatient(created);
               if (saveError) {
@@ -56,6 +79,25 @@ export default function PatientRegisterPage() {
           })();
         }}
       >
+        {addingFamily && (
+          <Field label="Relationship to main member">
+            <select
+              className={inputClass}
+              value={form.relationship}
+              onChange={(e) => {
+                const relationship = e.target.value as HouseholdRelationship;
+                set('relationship', relationship);
+                if (relationship === 'child' && !form.phone) set('phone', primary?.phone ?? '');
+                if (relationship !== 'child' && form.phone === (primary?.phone ?? '')) set('phone', '');
+              }}
+            >
+              <option value="child">Child (no own phone)</option>
+              <option value="spouse">Spouse / partner</option>
+              <option value="parent">Parent</option>
+              <option value="other">Other family</option>
+            </select>
+          </Field>
+        )}
         <Field label="First name"><input className={inputClass} required value={form.firstName} onChange={(e) => set('firstName', e.target.value)} /></Field>
         <Field label="Surname"><input className={inputClass} required value={form.lastName} onChange={(e) => set('lastName', e.target.value)} /></Field>
         <Field label="Date of birth"><input className={inputClass} type="date" required value={form.dob} onChange={(e) => set('dob', e.target.value)} /></Field>
@@ -77,7 +119,14 @@ export default function PatientRegisterPage() {
             <option value="gp_visit">GP visit card</option>
           </select>
         </Field>
-        <Field label="Phone"><input className={inputClass} value={form.phone} onChange={(e) => set('phone', e.target.value)} placeholder="08X XXX XXXX" /></Field>
+        <Field label={childUsesGuardianPhone ? 'Contact phone (guardian)' : 'Phone'}>
+          <input
+            className={inputClass}
+            value={childUsesGuardianPhone ? (form.phone || primary?.phone || '') : form.phone}
+            onChange={(e) => set('phone', e.target.value)}
+            placeholder={childUsesGuardianPhone ? 'Uses the main member’s mobile unless you enter another' : '08X XXX XXXX'}
+          />
+        </Field>
         <Field label="Email"><input className={inputClass} type="email" value={form.email} onChange={(e) => set('email', e.target.value)} /></Field>
         <Field label="Address"><input className={inputClass} value={form.address} onChange={(e) => set('address', e.target.value)} /></Field>
         <Field label="Eircode"><input className={inputClass} value={form.eircode} onChange={(e) => set('eircode', e.target.value)} /></Field>
@@ -103,7 +152,7 @@ export default function PatientRegisterPage() {
         {error && <p className="col-span-full text-xs text-red-600">{error}</p>}
         <div className="col-span-full">
           <AppButton type="submit" variant="primary">
-            Save patient
+            {addingFamily ? 'Save family member' : 'Save patient'}
           </AppButton>
         </div>
       </form>

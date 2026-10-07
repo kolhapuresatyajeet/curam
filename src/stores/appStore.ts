@@ -138,12 +138,17 @@ export const appStore = {
     audit('upsert', 'staff', member.id);
   },
   registerPatient(input: Omit<Patient, 'id' | 'practiceId' | 'createdAt' | 'colour'> & { colour?: Patient['colour'] }) {
+    const id = crypto.randomUUID();
+    const joiningHousehold = Boolean(input.householdId);
     const patient: Patient = {
       ...input,
-      id: crypto.randomUUID(),
+      id,
       practiceId: state.practice.id,
       createdAt: nowIso(),
       colour: input.colour ?? 'teal',
+      householdId: input.householdId || id,
+      isPrimary: joiningHousehold ? false : input.isPrimary !== false,
+      relationship: joiningHousehold ? input.relationship : 'self',
     };
     setState((current) => ({ ...current, patients: [patient, ...current.patients] }));
     audit('create', 'patient', patient.id, patient.id);

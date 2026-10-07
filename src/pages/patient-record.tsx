@@ -6,7 +6,7 @@ import { appStore, useAppState, useSessionStaff } from '@/stores/appStore';
 import { templateLabel } from '@/lib/consultation-templates';
 import { canManagePractice } from '@/lib/roles';
 import { exportPatientHistoryCsv, exportPatientRecord } from '@/lib/export';
-import { patientName, type ConsultationTemplate } from '@/types/domain';
+import { patientName, RELATIONSHIP_LABEL, type ConsultationTemplate } from '@/types/domain';
 import { openVoiceWidget } from '@/components/sile/voiceWidget';
 import { Mic } from 'lucide-react';
 
@@ -57,6 +57,9 @@ export default function PatientRecordPage() {
         <AppButton size="sm" onClick={() => setLocation('/calendar')}>
           Book
         </AppButton>
+        <AppButton size="sm" onClick={() => setLocation(`/patients/new?household=${patient.householdId || patient.id}`)}>
+          Add family member
+        </AppButton>
       </div>
       <Tabs items={TABS} value={tab} onChange={setTab} />
 
@@ -83,6 +86,7 @@ export default function PatientRecordPage() {
             ['PPS', patient.ppsNumber || '—'],
             ['Smoking', patient.smokingStatus],
             ['Síle consent', patient.sileConsent ? 'Yes' : 'No'],
+            ['Household', patient.isPrimary ? 'Main member' : RELATIONSHIP_LABEL[patient.relationship]],
           ].map(([label, value]) => (
             <div key={label} className="surface rounded-xl p-4">
               <div className="text-[10px] uppercase text-slate-400">{label}</div>
@@ -90,6 +94,10 @@ export default function PatientRecordPage() {
             </div>
           ))}
         </div>
+      )}
+
+      {tab === 'Summary' && (
+        <HouseholdPanel patientId={patient.id} householdId={patient.householdId || patient.id} />
       )}
 
       {tab === 'Timeline' && (
@@ -288,6 +296,50 @@ export default function PatientRecordPage() {
           {!docs.length && <div className="p-4 text-xs text-slate-400">No documents on file.</div>}
         </div>
       )}
+    </div>
+  );
+}
+
+function HouseholdPanel({ patientId, householdId }: { patientId: string; householdId: string }) {
+  const state = useAppState();
+  const [, setLocation] = useLocation();
+  const members = state.patients
+    .filter((p) => (p.householdId || p.id) === householdId && p.id !== patientId)
+    .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+  return (
+    <div className="mt-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-800">Household</h3>
+        <AppButton size="sm" onClick={() => setLocation(`/patients/new?household=${householdId}`)}>
+          + Family member
+        </AppButton>
+      </div>
+      <div className="surface divide-y rounded-xl">
+        {members.map((member) => (
+          <button
+            key={member.id}
+            type="button"
+            onClick={() => setLocation(`/patients/${member.id}`)}
+            className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+          >
+            <Avatar name={patientName(member)} size="sm" tone={member.colour} />
+            <span className="flex-1 text-xs">
+              <span className="font-semibold text-slate-700">{patientName(member)}</span>
+              <span className="ml-2 text-slate-400">
+                {RELATIONSHIP_LABEL[member.relationship]}
+                {member.isPrimary ? ' · main member' : ''}
+                {' · '}
+                {formatIrishPhone(member.phone)}
+              </span>
+            </span>
+          </button>
+        ))}
+        {!members.length && (
+          <div className="px-4 py-3 text-xs text-slate-400">
+            No family linked yet. Add a spouse (own number) or a child (uses this person’s phone if they have none).
+          </div>
+        )}
+      </div>
     </div>
   );
 }

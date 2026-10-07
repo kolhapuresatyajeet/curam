@@ -5,6 +5,7 @@ import type {
   CdmEnrolment,
   CdmReview,
   Gender,
+  HouseholdRelationship,
   Invoice,
   InvoiceStatus,
   MedicalCardType,
@@ -73,6 +74,9 @@ export interface PatientRow {
   smoking_status: string | null;
   gdpr_consent: boolean | null;
   sile_consent: boolean | null;
+  household_id?: string | null;
+  is_primary?: boolean | null;
+  relationship?: string | null;
   chronic_conditions?: string[] | null;
   created_at: string;
 }
@@ -129,6 +133,9 @@ export function patientFromRow(row: PatientRow): Patient {
     smokingStatus: (row.smoking_status as SmokingStatus) || 'unknown',
     gdprConsent: Boolean(row.gdpr_consent),
     sileConsent: Boolean(row.sile_consent),
+    householdId: row.household_id ?? row.id,
+    isPrimary: row.is_primary !== false,
+    relationship: (row.relationship as HouseholdRelationship) || 'self',
     chronicConditions: Array.isArray(row.chronic_conditions) ? row.chronic_conditions.map(String) : [],
     colour: tone,
     createdAt: row.created_at,
@@ -159,6 +166,9 @@ export function patientToRow(patient: Patient) {
     smoking_status: patient.smokingStatus,
     gdpr_consent: patient.gdprConsent,
     sile_consent: patient.sileConsent,
+    household_id: patient.householdId,
+    is_primary: patient.isPrimary,
+    relationship: patient.relationship,
   };
 }
 
