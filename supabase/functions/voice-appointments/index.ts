@@ -72,10 +72,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    const existing = await matchPatientsByMobile(admin, national);
-    const household = existing.patients.filter(
-      (p) => p.practice_id === keyPracticeId,
-    );
+    const existing = await matchPatientsByMobile(admin, national, keyPracticeId);
+    const household = existing.patients;
     const duplicate = household.find(
       (p) =>
         p.first_name.toLowerCase() === firstName.toLowerCase() &&
@@ -139,13 +137,11 @@ Deno.serve(async (req) => {
     return json({ registered: true, patient: publicPatient(created) }, 201);
   }
 
-  const lookup = await matchPatientsByMobile(admin, phone);
+  const lookup = await matchPatientsByMobile(admin, phone, keyPracticeId);
   if (lookup.status !== 200) {
     return json({ error: lookup.error }, lookup.status);
   }
-  const household = lookup.patients.filter(
-    (p) => p.practice_id === keyPracticeId,
-  );
+  const household = lookup.patients;
   if (!household.length) return json({ error: "Patient not found" }, 404);
 
   const members = household.map(householdMember);

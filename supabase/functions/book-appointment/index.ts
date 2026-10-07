@@ -58,12 +58,17 @@ Deno.serve(async (req) => {
     const { householdMember, matchPatientsByMobile } = await import(
       "../_shared/phone.ts"
     );
-    const matched = await matchPatientsByMobile(admin, phone);
+    const clinicId = scopedPracticeId ?? practiceId;
+    if (!clinicId) {
+      return json(
+        { error: "practiceId is required when looking up by phone" },
+        400,
+      );
+    }
+    const matched = await matchPatientsByMobile(admin, phone, clinicId);
     if (matched.status !== 200)
       return json({ error: matched.error }, matched.status);
-    const household = matched.patients.filter(
-      (p) => !scopedPracticeId || p.practice_id === scopedPracticeId,
-    );
+    const household = matched.patients;
     if (!household.length) return json({ error: "Patient not found" }, 404);
     const members = household.map(householdMember);
 
@@ -123,7 +128,7 @@ Deno.serve(async (req) => {
           { error: "Patient name and date of birth are required" },
           400,
         );
-      const { data: matches, error } = await admin
+      let nameQuery = admin
         .from("patients")
         .select(
           "id, practice_id, first_name, last_name, dob, sile_consent",
@@ -131,6 +136,8 @@ Deno.serve(async (req) => {
         .ilike("first_name", first)
         .ilike("last_name", last)
         .eq("dob", dob);
+      if (scopedPracticeId) nameQuery = nameQuery.eq("practice_id", scopedPracticeId);
+      const { data: matches, error } = await nameQuery;
       if (error) return json({ error: error.message }, 400);
       if (!matches?.length)
         return json(

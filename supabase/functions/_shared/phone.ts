@@ -82,19 +82,13 @@ type AdminClient = {
     data: MatchedPatient[] | null;
     error: { message: string } | null;
   }>;
-  from: (table: string) => {
-    select: (cols: string) => {
-      in: (
-        col: string,
-        vals: string[],
-      ) => Promise<{ data: MatchedPatient[] | null }>;
-    };
-  };
+  from: (table: string) => any;
 };
 
 export async function matchPatientsByMobile(
   admin: AdminClient,
   phone: string,
+  practiceId: string,
 ): Promise<{
   patients: MatchedPatient[];
   error?: string;
@@ -107,8 +101,12 @@ export async function matchPatientsByMobile(
       error: "A valid Irish mobile number is required",
       status: 400,
     };
+  if (!practiceId) {
+    return { patients: [], error: "Practice is required", status: 400 };
+  }
   const { data, error } = (await admin.rpc("patients_by_mobile", {
     p_phone: national,
+    p_practice_id: practiceId,
   })) as {
     data: MatchedPatient[] | null;
     error: { message: string } | null;
@@ -122,8 +120,7 @@ export async function matchPatientsByMobile(
     };
   }
 
-  // Parent's mobile also reaches children who have no handset of their own.
-  // Spouses/adults with a different number are not pulled in — they call on theirs.
+  // Parent's mobile also reaches children at THIS clinic who have no handset.
   const householdIds = [
     ...new Set(
       data
@@ -138,6 +135,7 @@ export async function matchPatientsByMobile(
       .select(
         "id, practice_id, first_name, last_name, dob, sile_consent, phone, household_id, is_primary, relationship",
       )
+      .eq("practice_id", practiceId)
       .in("household_id", householdIds);
     const known = new Set(data.map((p) => p.id));
     for (const extra of extras ?? []) {
@@ -157,13 +155,14 @@ export async function matchPatientsByMobile(
 export async function matchPatientByMobile(
   admin: AdminClient,
   phone: string,
+  practiceId: string,
 ): Promise<{
   patient?: MatchedPatient;
   patients?: MatchedPatient[];
   error?: string;
   status: 400 | 404 | 409 | 200;
 }> {
-  const result = await matchPatientsByMobile(admin, phone);
+  const result = await matchPatientsByMobile(admin, phone, practiceId);
   if (result.status !== 200)
     return { error: result.error, status: result.status, patients: [] };
   if (result.patients.length === 1) {

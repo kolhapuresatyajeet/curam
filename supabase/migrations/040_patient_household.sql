@@ -53,6 +53,9 @@ create unique index if not exists idx_patients_one_primary
   on patients (household_id) where is_primary;
 
 -- Voice lookup returns household fields so identify can label family members.
+-- Must DROP: CREATE OR REPLACE cannot change a function's OUT/return row type.
+drop function if exists public.patients_by_mobile(text);
+
 create or replace function patients_by_mobile(p_phone text)
 returns table (
   id uuid,
